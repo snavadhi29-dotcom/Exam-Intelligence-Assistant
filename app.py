@@ -4,6 +4,7 @@ import plotly.express as px
 import re
 from io import BytesIO
 from difflib import SequenceMatcher
+from datetime import date, timedelta
 
 from pypdf import PdfReader
 import pytesseract
@@ -14,7 +15,7 @@ from sklearn.metrics.pairwise import cosine_similarity
 
 
 # =========================================================
-# PAGE CONFIGURATION
+# PAGE CONFIG
 # =========================================================
 
 st.set_page_config(
@@ -25,7 +26,15 @@ st.set_page_config(
 
 
 # =========================================================
-# GENERAL TEXT CLEANING
+# SESSION STATE
+# =========================================================
+
+if "subjects" not in st.session_state:
+    st.session_state.subjects = []
+
+
+# =========================================================
+# TEXT PROCESSING
 # =========================================================
 
 STOP_WORDS = {
@@ -35,16 +44,14 @@ STOP_WORDS = {
     "explain", "define", "of", "to", "in", "on", "is",
     "are", "a", "an", "be", "if", "or", "as", "by",
     "at", "it", "its", "let", "where", "which", "then",
-    "also", "following", "following", "following"
+    "also", "following"
 }
 
 
 def normalize_text(text):
-    """Clean text for matching."""
 
     text = text.lower()
 
-    # Common OCR corrections
     text = text.replace("’", "'")
     text = text.replace("–", "-")
     text = text.replace("—", "-")
@@ -55,7 +62,6 @@ def normalize_text(text):
 
 
 def get_words(text):
-    """Return useful words from text."""
 
     text = normalize_text(text)
 
@@ -74,7 +80,6 @@ def get_words(text):
         if len(word) <= 2:
             continue
 
-        # Simple normalization for plurals
         if word.endswith("ies") and len(word) > 4:
             word = word[:-3] + "y"
 
@@ -87,11 +92,10 @@ def get_words(text):
 
 
 # =========================================================
-# PDF TEXT EXTRACTION
+# PDF EXTRACTION
 # =========================================================
 
 def extract_normal_pdf_text(pdf_bytes):
-    """Extract selectable text from a normal PDF."""
 
     try:
 
@@ -115,13 +119,7 @@ def extract_normal_pdf_text(pdf_bytes):
         return ""
 
 
-# =========================================================
-# OCR
-# =========================================================
-
 def extract_ocr_text(pdf_bytes):
-
-    """Read scanned/image-based PDF using Tesseract OCR."""
 
     try:
 
@@ -158,7 +156,7 @@ def extract_ocr_text(pdf_bytes):
     except Exception as e:
 
         st.error(
-            "OCR could not read this PDF."
+            "OCR could not process this PDF."
         )
 
         st.exception(e)
@@ -167,11 +165,6 @@ def extract_ocr_text(pdf_bytes):
 
 
 def extract_pdf_text(pdf_bytes):
-
-    """
-    First try normal text extraction.
-    If insufficient text is found, automatically use OCR.
-    """
 
     normal_text = extract_normal_pdf_text(
         pdf_bytes
@@ -187,7 +180,7 @@ def extract_pdf_text(pdf_bytes):
 
 
 # =========================================================
-# REMOVE PAPER INSTRUCTIONS / HEADERS
+# REMOVE PAPER INSTRUCTIONS
 # =========================================================
 
 def remove_instruction_lines(text):
@@ -258,32 +251,21 @@ def remove_instruction_lines(text):
 
 def extract_questions(text):
 
-    """
-    Detect main numbered questions.
-    Avoid treating paper instructions as questions.
-    """
+    text = text.replace(
+        "\r",
+        "\n"
+    )
 
-    text = text.replace("\r", "\n")
+    text = remove_instruction_lines(
+        text
+    )
 
-    text = remove_instruction_lines(text)
-
-    # Normalize multiple blank lines
     text = re.sub(
         r"\n{2,}",
         "\n",
         text
     )
 
-    # Question starts:
-    #
-    # Q1.
-    # Q1)
-    # Q.1
-    # Question 1
-    # 1.
-    # 1)
-    # 1:
-    #
     question_pattern = re.compile(
         r"(?:^|\n)"
         r"\s*"
@@ -311,8 +293,11 @@ def extract_questions(text):
             start = match.end()
 
             if i + 1 < len(matches):
+
                 end = matches[i + 1].start()
+
             else:
+
                 end = len(text)
 
             question_text = text[
@@ -325,11 +310,9 @@ def extract_questions(text):
                 question_text
             )
 
-            # Remove very short false detections
             if len(question_text) < 25:
                 continue
 
-            # Ignore obvious instruction blocks
             lower = question_text.lower()
 
             instruction_words = [
@@ -350,8 +333,6 @@ def extract_questions(text):
                 question_text
             )
 
-    # If no numbered questions were found,
-    # use paragraph-based extraction.
     if len(questions) == 0:
 
         paragraphs = re.split(
@@ -416,7 +397,8 @@ def fuzzy_word_score(question, topic):
         total += best
 
     return (
-        total / len(topic_words)
+        total /
+        len(topic_words)
     ) * 100
 
 
@@ -484,7 +466,6 @@ def topic_similarity(question, topic):
         topic
     )
 
-    # Exact phrase = very strong match
     if topic_clean in question_clean:
 
         return 100
@@ -504,7 +485,6 @@ def topic_similarity(question, topic):
         topic
     )
 
-    # Combined score
     final_score = (
         word_score * 0.40
         +
@@ -519,7 +499,10 @@ def topic_similarity(question, topic):
     )
 
 
-def find_best_topic(question, topics):
+def find_best_topic(
+    question,
+    topics
+):
 
     scores = []
 
@@ -540,11 +523,11 @@ def find_best_topic(question, topics):
     )
 
     if not scores:
+
         return "Unclassified", 0
 
     best_topic, best_score = scores[0]
 
-    # More forgiving threshold for OCR
     if best_score < 15:
 
         return "Unclassified", best_score
@@ -553,50 +536,83 @@ def find_best_topic(question, topics):
 
 
 # =========================================================
-# ANALYZE ONE PAPER
+# ANALYZE A SUBJECT
 # =========================================================
 
-def analyze_paper(
-    questions,
+def analyze_subject(
+    subject_name,
     topics,
-    paper_name
+    uploaded_files
 ):
 
-    results = []
+    all_results = []
 
-    for number, question in enumerate(
-        questions,
-        start=1
-    ):
+    processing_messages = []
 
-        topic, score = find_best_topic(
-            question,
-            topics
+    for file in uploaded_files:
+
+        pdf_bytes = file.getvalue()
+
+        extracted_text, method = (
+            extract_pdf_text(
+                pdf_bytes
+            )
         )
 
-        results.append({
+        if not extracted_text.strip():
 
-            "Paper": paper_name,
+            processing_messages.append(
+                f"⚠️ {file.name}: no text found."
+            )
 
-            "Question No.": number,
+            continue
 
-            "Question": question,
+        questions = extract_questions(
+            extracted_text
+        )
 
-            "Matched Topic": topic,
+        processing_messages.append(
+            f"📄 {file.name}: "
+            f"{len(questions)} questions detected "
+            f"using {method}."
+        )
 
-            "Match Score": score
-        })
+        for number, question in enumerate(
+            questions,
+            start=1
+        ):
 
-    return pd.DataFrame(
-        results
+            topic, score = find_best_topic(
+                question,
+                topics
+            )
+
+            all_results.append({
+
+                "Subject": subject_name,
+
+                "Paper": file.name,
+
+                "Question No.": number,
+
+                "Question": question,
+
+                "Matched Topic": topic,
+
+                "Match Score": score
+            })
+
+    return (
+        pd.DataFrame(all_results),
+        processing_messages
     )
 
 
 # =========================================================
-# BUILD TOPIC STATISTICS
+# TOPIC PRIORITY
 # =========================================================
 
-def build_topic_statistics(
+def calculate_topic_priority(
     results_df,
     topics,
     number_of_papers
@@ -607,7 +623,8 @@ def build_topic_statistics(
     for topic in topics:
 
         matched = results_df[
-            results_df["Matched Topic"] == topic
+            results_df["Matched Topic"]
+            == topic
         ]
 
         question_count = len(
@@ -619,19 +636,16 @@ def build_topic_statistics(
             .nunique()
         )
 
-        # Percentage of papers in which topic appeared
         paper_coverage = (
             paper_count /
             max(number_of_papers, 1)
         ) * 100
 
-        # Percentage of all detected questions
         question_frequency = (
             question_count /
             max(len(results_df), 1)
         ) * 100
 
-        # Combined score
         priority_score = (
             paper_coverage * 0.60
             +
@@ -665,9 +679,10 @@ def build_topic_statistics(
                 )
         })
 
-    df = pd.DataFrame(rows)
+    df = pd.DataFrame(
+        rows
+    )
 
-    # Rank topics
     df = df.sort_values(
         by="Priority Score",
         ascending=False
@@ -675,18 +690,11 @@ def build_topic_statistics(
         drop=True
     )
 
-    # Assign priority based on ranking
-    # rather than requiring an arbitrary
-    # large number of questions.
-
     total_topics = len(df)
 
-    for index in range(total_topics):
-
-        score = df.loc[
-            index,
-            "Priority Score"
-        ]
+    for index in range(
+        total_topics
+    ):
 
         questions = df.loc[
             index,
@@ -699,14 +707,18 @@ def build_topic_statistics(
 
         elif index < max(
             1,
-            round(total_topics * 0.30)
+            round(
+                total_topics * 0.30
+            )
         ):
 
             priority = "High"
 
         elif index < max(
             2,
-            round(total_topics * 0.70)
+            round(
+                total_topics * 0.70
+            )
         ):
 
             priority = "Medium"
@@ -724,57 +736,248 @@ def build_topic_statistics(
 
 
 # =========================================================
-# REVISION PLAN
+# CREATE STUDY TASKS
 # =========================================================
 
-def build_revision_plan(
-    priority_df
+def create_tasks(
+    all_subject_data
 ):
 
-    plans = []
+    tasks = []
 
-    for _, row in priority_df.iterrows():
+    for subject in all_subject_data:
 
-        topic = row["Topic"]
+        subject_name = subject["name"]
 
-        priority = row["Priority"]
+        exam_date = subject["exam_date"]
 
-        questions = row["Questions"]
+        priority_df = subject[
+            "priority_df"
+        ]
 
-        if priority == "High":
+        for _, row in priority_df.iterrows():
 
-            action = (
-                "Study thoroughly, revise concepts "
-                "and solve previous-year questions."
+            priority = row[
+                "Priority"
+            ]
+
+            questions = row[
+                "Questions"
+            ]
+
+            if questions == 0:
+                continue
+
+            if priority == "High":
+
+                minutes = 90
+
+            elif priority == "Medium":
+
+                minutes = 60
+
+            else:
+
+                minutes = 40
+
+            tasks.append({
+
+                "Subject":
+                    subject_name,
+
+                "Topic":
+                    row["Topic"],
+
+                "Priority":
+                    priority,
+
+                "Minutes":
+                    minutes,
+
+                "Exam Date":
+                    exam_date,
+
+                "Priority Score":
+                    row[
+                        "Priority Score"
+                    ]
+            })
+
+    return tasks
+
+
+# =========================================================
+# GENERATE SMART TIMETABLE
+# =========================================================
+
+def generate_timetable(
+    all_subject_data
+):
+
+    if not all_subject_data:
+
+        return pd.DataFrame()
+
+    today = date.today()
+
+    tasks = create_tasks(
+        all_subject_data
+    )
+
+    if not tasks:
+
+        return pd.DataFrame()
+
+    # Sort subjects by exam date
+    tasks.sort(
+        key=lambda x: x["Exam Date"]
+    )
+
+    earliest_exam = min(
+        subject["exam_date"]
+        for subject in all_subject_data
+    )
+
+    # We plan until the last exam date
+    latest_exam = max(
+        subject["exam_date"]
+        for subject in all_subject_data
+    )
+
+    start_date = today
+
+    if start_date > latest_exam:
+
+        return pd.DataFrame()
+
+    # -----------------------------------------------------
+    # Create available study days
+    # -----------------------------------------------------
+
+    available_days = []
+
+    current = start_date
+
+    while current <= latest_exam:
+
+        available_days.append(
+            current
+        )
+
+        current += timedelta(
+            days=1
+        )
+
+    # -----------------------------------------------------
+    # Schedule tasks
+    # -----------------------------------------------------
+
+    timetable = []
+
+    remaining_tasks = tasks.copy()
+
+    for study_day in available_days:
+
+        if not remaining_tasks:
+            break
+
+        # Tasks whose exam has not passed
+        valid_tasks = []
+
+        for task in remaining_tasks:
+
+            if study_day <= task[
+                "Exam Date"
+            ]:
+
+                valid_tasks.append(
+                    task
+                )
+
+        if not valid_tasks:
+            continue
+
+        # Calculate urgency
+        scored_tasks = []
+
+        for task in valid_tasks:
+
+            days_left = (
+                task["Exam Date"]
+                - study_day
+            ).days
+
+            priority_weight = {
+
+                "High": 3,
+
+                "Medium": 2,
+
+                "Low": 1
+            }[
+                task["Priority"]
+            ]
+
+            urgency = (
+                priority_weight * 100
+                +
+                task["Priority Score"]
+                +
+                max(
+                    0,
+                    30 - days_left * 2
+                )
             )
 
-        elif priority == "Medium":
-
-            action = (
-                "Revise concepts and practice "
-                "important questions."
+            scored_tasks.append(
+                (
+                    urgency,
+                    task
+                )
             )
 
-        else:
+        scored_tasks.sort(
+            key=lambda x: x[0],
+            reverse=True
+        )
 
-            action = (
-                "Keep for quick revision after "
-                "high and medium priority topics."
+        # Give 2 study sessions per day
+        daily_tasks = scored_tasks[:2]
+
+        for _, task in daily_tasks:
+
+            timetable.append({
+
+                "Date":
+                    study_day,
+
+                "Day":
+                    study_day.strftime(
+                        "%A"
+                    ),
+
+                "Subject":
+                    task["Subject"],
+
+                "Topic":
+                    task["Topic"],
+
+                "Priority":
+                    task["Priority"],
+
+                "Study Time":
+                    f"{task['Minutes']} min",
+
+                "Exam Date":
+                    task["Exam Date"]
+            })
+
+            remaining_tasks.remove(
+                task
             )
-
-        plans.append({
-
-            "Topic": topic,
-
-            "Priority": priority,
-
-            "Past Questions": questions,
-
-            "Recommended Action": action
-        })
 
     return pd.DataFrame(
-        plans
+        timetable
     )
 
 
@@ -783,21 +986,26 @@ def build_revision_plan(
 # =========================================================
 
 st.sidebar.title(
-    "⚙️ Exam Setup"
+    "📚 Exam Intelligence"
 )
 
-subject = st.sidebar.text_input(
-    "Subject",
-    placeholder="Example: Applied Mathematics"
+st.sidebar.write(
+    "Plan your preparation across "
+    "multiple subjects."
 )
 
-exam_date = st.sidebar.date_input(
-    "Exam Date"
+st.sidebar.divider()
+
+st.sidebar.metric(
+    "Subjects Added",
+    len(
+        st.session_state.subjects
+    )
 )
 
 
 # =========================================================
-# MAIN PAGE
+# HEADER
 # =========================================================
 
 st.title(
@@ -805,441 +1013,640 @@ st.title(
 )
 
 st.write(
-    "Analyze multiple past exam papers, "
-    "identify repeated syllabus topics and "
-    "generate a smart revision plan."
+    "Analyze previous-year papers across multiple "
+    "subjects and create a personalized study plan."
 )
 
 
 # =========================================================
-# SYLLABUS
+# SUBJECT CREATION
 # =========================================================
 
-st.subheader(
-    "1️⃣ Enter Your Syllabus"
+st.header(
+    "📖 Add Your Subjects"
 )
 
-syllabus_text = st.text_area(
-    "Enter one syllabus topic per line",
-    height=180,
-    placeholder=(
-        "Example:\n"
-        "Review of successive differentiation\n"
-        "Leibnitz theorem and problems\n"
-        "Taylor's and Maclaurin's theorem\n"
-        "Asymptotes\n"
-        "Beta and gamma functions\n"
-        "Tracing curves"
-    )
-)
-
-
-# =========================================================
-# MULTIPLE PDF UPLOAD
-# =========================================================
-
-st.subheader(
-    "2️⃣ Upload Previous Exam Papers"
-)
-
-uploaded_files = st.file_uploader(
-    "Upload one or more PDF question papers",
-    type=["pdf"],
-    accept_multiple_files=True
-)
-
-if uploaded_files:
-
-    st.success(
-        f"{len(uploaded_files)} PDF(s) uploaded successfully."
-    )
-
-    st.write("**Uploaded papers:**")
-
-    for file in uploaded_files:
-
-        st.write(
-            f"📄 {file.name}"
-        )
-
-
-# =========================================================
-# ANALYZE BUTTON
-# =========================================================
-
-if st.button(
-    "🔍 Analyze Exam Papers",
-    type="primary"
+with st.expander(
+    "➕ Add a new subject",
+    expanded=True
 ):
 
-    # -----------------------------
-    # Validate syllabus
-    # -----------------------------
-
-    if not syllabus_text.strip():
-
-        st.warning(
-            "Please enter your syllabus topics."
-        )
-
-        st.stop()
-
-    # -----------------------------
-    # Validate files
-    # -----------------------------
-
-    if not uploaded_files:
-
-        st.warning(
-            "Please upload at least one PDF."
-        )
-
-        st.stop()
-
-    # -----------------------------
-    # Convert syllabus to list
-    # -----------------------------
-
-    topics = [
-
-        topic.strip()
-
-        for topic in syllabus_text.split("\n")
-
-        if topic.strip()
-    ]
-
-    if len(topics) == 0:
-
-        st.warning(
-            "Please enter at least one syllabus topic."
-        )
-
-        st.stop()
-
-    # -----------------------------
-    # Analyze all papers
-    # -----------------------------
-
-    all_results = []
-
-    st.header(
-        "📄 Paper Processing"
+    subject_name = st.text_input(
+        "Subject Name",
+        placeholder="Example: Applied Mathematics"
     )
 
-    for file in uploaded_files:
+    exam_date = st.date_input(
+        "Exam Date",
+        value=date.today() + timedelta(days=7)
+    )
 
-        st.write(
-            f"**Processing:** {file.name}"
+    syllabus = st.text_area(
+        "Syllabus — one topic per line",
+        height=160,
+        placeholder=(
+            "Review of successive differentiation\n"
+            "Leibnitz theorem and problems\n"
+            "Taylor's and Maclaurin's theorem\n"
+            "Beta and gamma functions\n"
+            "Tracing curves"
         )
+    )
 
-        pdf_bytes = file.getvalue()
+    papers = st.file_uploader(
+        "Upload previous-year question papers",
+        type=["pdf"],
+        accept_multiple_files=True,
+        key="new_subject_papers"
+    )
 
-        extracted_text, method = (
-            extract_pdf_text(
-                pdf_bytes
-            )
-        )
+    if st.button(
+        "➕ Add Subject"
+    ):
 
-        if not extracted_text.strip():
+        if not subject_name.strip():
 
             st.warning(
-                f"No readable text found in {file.name}."
+                "Please enter the subject name."
             )
 
-            continue
-
-        questions = extract_questions(
-            extracted_text
-        )
-
-        st.write(
-            f"Detected {len(questions)} "
-            f"main questions using {method}."
-        )
-
-        if len(questions) == 0:
+        elif not syllabus.strip():
 
             st.warning(
-                f"Could not detect questions in "
-                f"{file.name}."
+                "Please enter the syllabus."
             )
 
-            continue
+        elif not papers:
 
-        paper_results = analyze_paper(
-            questions,
-            topics,
-            file.name
-        )
-
-        all_results.append(
-            paper_results
-        )
-
-    # -----------------------------
-    # Check results
-    # -----------------------------
-
-    if not all_results:
-
-        st.error(
-            "No questions could be extracted "
-            "from the uploaded papers."
-        )
-
-        st.stop()
-
-    results_df = pd.concat(
-        all_results,
-        ignore_index=True
-    )
-
-    # -----------------------------
-    # Topic statistics
-    # -----------------------------
-
-    priority_df = build_topic_statistics(
-        results_df,
-        topics,
-        len(uploaded_files)
-    )
-
-    revision_df = build_revision_plan(
-        priority_df
-    )
-
-    # =====================================================
-    # DASHBOARD
-    # =====================================================
-
-    st.divider()
-
-    st.header(
-        "📊 Exam Intelligence Dashboard"
-    )
-
-    col1, col2, col3, col4 = st.columns(4)
-
-    with col1:
-
-        st.metric(
-            "Papers Analyzed",
-            len(uploaded_files)
-        )
-
-    with col2:
-
-        st.metric(
-            "Questions Detected",
-            len(results_df)
-        )
-
-    with col3:
-
-        st.metric(
-            "Syllabus Topics",
-            len(topics)
-        )
-
-    with col4:
-
-        high_count = len(
-            priority_df[
-                priority_df["Priority"]
-                == "High"
-            ]
-        )
-
-        st.metric(
-            "High Priority Topics",
-            high_count
-        )
-
-    # =====================================================
-    # TOPIC FREQUENCY
-    # =====================================================
-
-    st.subheader(
-        "📈 Topic Frequency Across Papers"
-    )
-
-    chart_df = priority_df[
-        [
-            "Topic",
-            "Questions"
-        ]
-    ].copy()
-
-    fig = px.bar(
-        chart_df,
-        x="Topic",
-        y="Questions",
-        text="Questions",
-        title=(
-            "How Often Each Syllabus Topic "
-            "Appeared in Previous Papers"
-        )
-    )
-
-    fig.update_layout(
-        xaxis_tickangle=-35
-    )
-
-    st.plotly_chart(
-        fig,
-        use_container_width=True
-    )
-
-    # =====================================================
-    # PRIORITY TABLE
-    # =====================================================
-
-    st.subheader(
-        "🎯 Topic Priority"
-    )
-
-    st.dataframe(
-        priority_df[
-            [
-                "Topic",
-                "Questions",
-                "Papers",
-                "Paper Coverage %",
-                "Question Frequency %",
-                "Priority Score",
-                "Priority"
-            ]
-        ],
-        use_container_width=True,
-        hide_index=True
-    )
-
-    # =====================================================
-    # REVISION PLAN
-    # =====================================================
-
-    st.subheader(
-        "📝 Smart Revision Plan"
-    )
-
-    st.dataframe(
-        revision_df,
-        use_container_width=True,
-        hide_index=True
-    )
-
-    # =====================================================
-    # HIGH PRIORITY TOPICS
-    # =====================================================
-
-    high_topics = priority_df[
-        priority_df["Priority"] == "High"
-    ]
-
-    if len(high_topics) > 0:
-
-        st.subheader(
-            "🔥 Focus on These Topics First"
-        )
-
-        for _, row in high_topics.iterrows():
-
-            st.write(
-                f"🔴 **{row['Topic']}** — "
-                f"appeared in "
-                f"{row['Papers']} paper(s) "
-                f"with {row['Questions']} "
-                f"detected question(s)."
+            st.warning(
+                "Please upload at least one "
+                "question paper."
             )
 
-    # =====================================================
-    # MEDIUM PRIORITY
-    # =====================================================
+        else:
 
-    medium_topics = priority_df[
-        priority_df["Priority"] == "Medium"
-    ]
+            topics = [
 
-    if len(medium_topics) > 0:
+                topic.strip()
 
-        st.subheader(
-            "🟡 Next Priority"
-        )
+                for topic in
+                syllabus.split("\n")
 
-        for _, row in medium_topics.iterrows():
+                if topic.strip()
+            ]
 
-            st.write(
-                f"🟡 **{row['Topic']}**"
+            new_subject = {
+
+                "name":
+                    subject_name.strip(),
+
+                "exam_date":
+                    exam_date,
+
+                "topics":
+                    topics,
+
+                "papers":
+                    papers
+            }
+
+            st.session_state.subjects.append(
+                new_subject
             )
 
-    # =====================================================
-    # QUESTION MAPPING
-    # =====================================================
+            st.success(
+                f"{subject_name} added successfully!"
+            )
+
+            st.rerun()
+
+
+# =========================================================
+# DISPLAY ADDED SUBJECTS
+# =========================================================
+
+if st.session_state.subjects:
 
     st.subheader(
-        "🔗 Question → Topic Mapping"
+        "📚 Your Subjects"
     )
 
-    st.dataframe(
-        results_df[
-            [
-                "Paper",
-                "Question No.",
-                "Question",
-                "Matched Topic",
-                "Match Score"
-            ]
-        ],
-        use_container_width=True,
-        hide_index=True
-    )
+    for index, subject in enumerate(
+        st.session_state.subjects
+    ):
 
-    # =====================================================
-    # UNCLASSIFIED QUESTIONS
-    # =====================================================
-
-    unclassified = results_df[
-        results_df["Matched Topic"]
-        == "Unclassified"
-    ]
-
-    if len(unclassified) > 0:
-
-        st.subheader(
-            "⚠️ Questions That Need Better Matching"
+        col1, col2 = st.columns(
+            [5, 1]
         )
 
-        st.info(
-            f"{len(unclassified)} question(s) "
-            "could not be confidently matched "
-            "to your syllabus."
+        with col1:
+
+            st.info(
+                f"📘 **{subject['name']}**\n\n"
+                f"📅 Exam: "
+                f"{subject['exam_date'].strftime('%d %B %Y')}\n\n"
+                f"📚 Topics: "
+                f"{len(subject['topics'])}\n\n"
+                f"📄 Previous papers: "
+                f"{len(subject['papers'])}"
+            )
+
+        with col2:
+
+            if st.button(
+                "🗑️ Remove",
+                key=f"remove_{index}"
+            ):
+
+                st.session_state.subjects.pop(
+                    index
+                )
+
+                st.rerun()
+
+
+# =========================================================
+# ANALYZE EVERYTHING
+# =========================================================
+
+st.divider()
+
+if st.session_state.subjects:
+
+    if st.button(
+        "🚀 Analyze All Subjects & Create Study Plan",
+        type="primary"
+    ):
+
+        all_subject_data = []
+
+        for subject in st.session_state.subjects:
+
+            st.subheader(
+                f"🔍 Analyzing {subject['name']}"
+            )
+
+            results_df, messages = (
+                analyze_subject(
+                    subject["name"],
+                    subject["topics"],
+                    subject["papers"]
+                )
+            )
+
+            for message in messages:
+
+                st.write(message)
+
+            if results_df.empty:
+
+                st.warning(
+                    f"No questions could be "
+                    f"extracted from "
+                    f"{subject['name']}."
+                )
+
+                continue
+
+            priority_df = (
+                calculate_topic_priority(
+                    results_df,
+                    subject["topics"],
+                    len(subject["papers"])
+                )
+            )
+
+            all_subject_data.append({
+
+                "name":
+                    subject["name"],
+
+                "exam_date":
+                    subject["exam_date"],
+
+                "results_df":
+                    results_df,
+
+                "priority_df":
+                    priority_df
+            })
+
+        if not all_subject_data:
+
+            st.error(
+                "No subject could be analyzed."
+            )
+
+            st.stop()
+
+        # =================================================
+        # OVERALL DASHBOARD
+        # =================================================
+
+        st.divider()
+
+        st.header(
+            "📊 Overall Exam Dashboard"
+        )
+
+        total_questions = sum(
+            len(
+                subject["results_df"]
+            )
+            for subject in all_subject_data
+        )
+
+        total_topics = sum(
+            len(
+                subject["priority_df"]
+            )
+            for subject in all_subject_data
+        )
+
+        high_topics = sum(
+            len(
+                subject["priority_df"][
+                    subject["priority_df"][
+                        "Priority"
+                    ] == "High"
+                ]
+            )
+            for subject in all_subject_data
+        )
+
+        col1, col2, col3, col4 = st.columns(
+            4
+        )
+
+        with col1:
+
+            st.metric(
+                "Subjects",
+                len(all_subject_data)
+            )
+
+        with col2:
+
+            st.metric(
+                "Questions Analyzed",
+                total_questions
+            )
+
+        with col3:
+
+            st.metric(
+                "Syllabus Topics",
+                total_topics
+            )
+
+        with col4:
+
+            st.metric(
+                "High Priority Topics",
+                high_topics
+            )
+
+
+        # =================================================
+        # SUBJECT PRIORITY
+        # =================================================
+
+        st.subheader(
+            "🔥 Subject Priority"
+        )
+
+        subject_rows = []
+
+        for subject in all_subject_data:
+
+            priority_df = subject[
+                "priority_df"
+            ]
+
+            high_count = len(
+                priority_df[
+                    priority_df["Priority"]
+                    == "High"
+                ]
+            )
+
+            total_score = (
+                priority_df[
+                    "Priority Score"
+                ].sum()
+            )
+
+            days_left = (
+                subject["exam_date"]
+                - date.today()
+            ).days
+
+            subject_rows.append({
+
+                "Subject":
+                    subject["name"],
+
+                "Exam Date":
+                    subject["exam_date"],
+
+                "Days Left":
+                    max(
+                        days_left,
+                        0
+                    ),
+
+                "High Priority Topics":
+                    high_count,
+
+                "Priority Score":
+                    round(
+                        total_score,
+                        1
+                    )
+            })
+
+        subject_df = pd.DataFrame(
+            subject_rows
         )
 
         st.dataframe(
-            unclassified[
-                [
-                    "Paper",
-                    "Question No.",
-                    "Question",
-                    "Match Score"
-                ]
-            ],
+            subject_df,
             use_container_width=True,
             hide_index=True
         )
 
-    # =====================================================
-    # EXAM INFORMATION
-    # =====================================================
 
-    st.divider()
+        # =================================================
+        # SUBJECT CHART
+        # =================================================
 
-    st.caption(
-        f"Subject: "
-        f"{subject if subject else 'Not specified'}"
-    )
+        fig = px.bar(
+            subject_df,
+            x="Subject",
+            y="Priority Score",
+            text="Priority Score",
+            title="Overall Subject Priority"
+        )
 
-    st.caption(
-        f"Exam Date: {exam_date}"
+        st.plotly_chart(
+            fig,
+            use_container_width=True
+        )
+
+
+        # =================================================
+        # SUBJECT-WISE ANALYSIS
+        # =================================================
+
+        st.header(
+            "📚 Subject-wise Analysis"
+        )
+
+        for subject in all_subject_data:
+
+            with st.expander(
+                f"📘 {subject['name']}"
+            ):
+
+                priority_df = subject[
+                    "priority_df"
+                ]
+
+                results_df = subject[
+                    "results_df"
+                ]
+
+                st.write(
+                    f"**Exam Date:** "
+                    f"{subject['exam_date'].strftime('%d %B %Y')}"
+                )
+
+                st.dataframe(
+                    priority_df,
+                    use_container_width=True,
+                    hide_index=True
+                )
+
+                chart_df = priority_df[
+                    [
+                        "Topic",
+                        "Questions"
+                    ]
+                ]
+
+                fig = px.bar(
+                    chart_df,
+                    x="Topic",
+                    y="Questions",
+                    text="Questions",
+                    title=(
+                        f"Topic Frequency — "
+                        f"{subject['name']}"
+                    )
+                )
+
+                fig.update_layout(
+                    xaxis_tickangle=-35
+                )
+
+                st.plotly_chart(
+                    fig,
+                    use_container_width=True
+                )
+
+                st.write(
+                    "**Question → Topic Mapping**"
+                )
+
+                st.dataframe(
+                    results_df[
+                        [
+                            "Paper",
+                            "Question No.",
+                            "Question",
+                            "Matched Topic",
+                            "Match Score"
+                        ]
+                    ],
+                    use_container_width=True,
+                    hide_index=True
+                )
+
+
+        # =================================================
+        # SMART STUDY TIMETABLE
+        # =================================================
+
+        st.divider()
+
+        st.header(
+            "📅 Your Personalized Study Timetable"
+        )
+
+        timetable = generate_timetable(
+            all_subject_data
+        )
+
+        if timetable.empty:
+
+            st.warning(
+                "A timetable could not be generated."
+            )
+
+        else:
+
+            st.success(
+                "Your study plan has been generated "
+                "based on exam dates and topic priorities."
+            )
+
+            st.dataframe(
+                timetable,
+                use_container_width=True,
+                hide_index=True
+            )
+
+            # -------------------------------------------------
+            # DAILY PLAN
+            # -------------------------------------------------
+
+            st.subheader(
+                "🗓️ Daily Study Plan"
+            )
+
+            unique_dates = (
+                timetable["Date"]
+                .unique()
+            )
+
+            for study_date in unique_dates:
+
+                day_tasks = timetable[
+                    timetable["Date"]
+                    == study_date
+                ]
+
+                st.markdown(
+                    f"### 📅 "
+                    f"{study_date.strftime('%A, %d %B')}"
+                )
+
+                for _, task in day_tasks.iterrows():
+
+                    priority_icon = {
+
+                        "High": "🔴",
+
+                        "Medium": "🟡",
+
+                        "Low": "🟢"
+
+                    }.get(
+                        task["Priority"],
+                        "⚪"
+                    )
+
+                    st.write(
+                        f"{priority_icon} "
+                        f"**{task['Subject']}** — "
+                        f"{task['Topic']} "
+                        f"({task['Study Time']})"
+                    )
+
+
+        # =================================================
+        # STUDY NOW
+        # =================================================
+
+        st.divider()
+
+        st.header(
+            "🎯 What Should You Study First?"
+        )
+
+        candidates = []
+
+        for subject in all_subject_data:
+
+            priority_df = subject[
+                "priority_df"
+            ]
+
+            for _, row in priority_df.iterrows():
+
+                if row["Questions"] == 0:
+                    continue
+
+                days_left = (
+                    subject["exam_date"]
+                    - date.today()
+                ).days
+
+                priority_weight = {
+
+                    "High": 3,
+
+                    "Medium": 2,
+
+                    "Low": 1
+
+                }[
+                    row["Priority"]
+                ]
+
+                score = (
+                    priority_weight * 100
+                    +
+                    row["Priority Score"]
+                    +
+                    max(
+                        0,
+                        30 - days_left * 2
+                    )
+                )
+
+                candidates.append({
+
+                    "score":
+                        score,
+
+                    "Subject":
+                        subject["name"],
+
+                    "Topic":
+                        row["Topic"],
+
+                    "Priority":
+                        row["Priority"],
+
+                    "Exam Date":
+                        subject["exam_date"],
+
+                    "Questions":
+                        row["Questions"]
+                })
+
+        candidates.sort(
+            key=lambda x: x["score"],
+            reverse=True
+        )
+
+        if candidates:
+
+            first = candidates[0]
+
+            st.success(
+                f"### 📖 {first['Topic']}\n\n"
+                f"**Subject:** {first['Subject']}\n\n"
+                f"**Priority:** {first['Priority']}\n\n"
+                f"**Previous-paper questions:** "
+                f"{first['Questions']}\n\n"
+                f"**Exam:** "
+                f"{first['Exam Date'].strftime('%d %B %Y')}"
+            )
+
+else:
+
+    st.info(
+        "👆 Add your subjects above to begin."
     )
