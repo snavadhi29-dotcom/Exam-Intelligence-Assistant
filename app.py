@@ -2,17 +2,20 @@ import streamlit as st
 import pandas as pd
 import plotly.express as px
 import re
-from difflib import SequenceMatcher
 from io import BytesIO
+from difflib import SequenceMatcher
 
 from pypdf import PdfReader
 import pytesseract
 from pdf2image import convert_from_bytes
 
+from sklearn.feature_extraction.text import TfidfVectorizer
+from sklearn.metrics.pairwise import cosine_similarity
 
-# ---------------------------------------------------------
-# PAGE SETTINGS
-# ---------------------------------------------------------
+
+# =========================================================
+# PAGE CONFIGURATION
+# =========================================================
 
 st.set_page_config(
     page_title="Exam Intelligence Assistant",
@@ -21,75 +24,107 @@ st.set_page_config(
 )
 
 
-# ---------------------------------------------------------
-# TEXT CLEANING
-# ---------------------------------------------------------
+# =========================================================
+# GENERAL TEXT CLEANING
+# =========================================================
 
-def clean_text(text):
+STOP_WORDS = {
+    "the", "and", "for", "with", "from", "that", "this",
+    "find", "show", "prove", "calculate", "using", "given",
+    "derive", "determine", "solve", "evaluate", "write",
+    "explain", "define", "of", "to", "in", "on", "is",
+    "are", "a", "an", "be", "if", "or", "as", "by",
+    "at", "it", "its", "let", "where", "which", "then",
+    "also", "following", "following", "following"
+}
+
+
+def normalize_text(text):
+    """Clean text for matching."""
+
     text = text.lower()
-    text = text.replace("\n", " ")
+
+    # Common OCR corrections
+    text = text.replace("’", "'")
+    text = text.replace("–", "-")
+    text = text.replace("—", "-")
+
     text = re.sub(r"\s+", " ", text)
-    text = re.sub(r"[^\w\s\-\+\=\(\)\/\.]", " ", text)
+
     return text.strip()
 
 
 def get_words(text):
-    text = clean_text(text)
+    """Return useful words from text."""
 
-    words = re.findall(r"[a-zA-Z]+", text)
+    text = normalize_text(text)
 
-    stop_words = {
-        "the", "and", "for", "with", "from", "that", "this",
-        "find", "show", "prove", "calculate", "using", "given",
-        "derive", "determine", "solve", "evaluate", "write",
-        "explain", "define", "of", "to", "in", "on", "is", "are",
-        "a", "an", "be", "if", "or", "as", "by", "at", "it",
-        "its", "let", "where", "which", "then", "also"
-    }
+    words = re.findall(
+        r"[a-zA-Z]+",
+        text
+    )
 
-    return [
-        word for word in words
-        if word not in stop_words and len(word) > 2
-    ]
+    cleaned = []
+
+    for word in words:
+
+        if word in STOP_WORDS:
+            continue
+
+        if len(word) <= 2:
+            continue
+
+        # Simple normalization for plurals
+        if word.endswith("ies") and len(word) > 4:
+            word = word[:-3] + "y"
+
+        elif word.endswith("s") and len(word) > 4:
+            word = word[:-1]
+
+        cleaned.append(word)
+
+    return cleaned
 
 
-# ---------------------------------------------------------
+# =========================================================
 # PDF TEXT EXTRACTION
-# ---------------------------------------------------------
+# =========================================================
 
 def extract_normal_pdf_text(pdf_bytes):
-    """
-    Try extracting selectable text from a normal PDF.
-    """
+    """Extract selectable text from a normal PDF."""
 
     try:
-        reader = PdfReader(BytesIO(pdf_bytes))
 
-        pages = []
+        reader = PdfReader(
+            BytesIO(pdf_bytes)
+        )
+
+        page_texts = []
 
         for page in reader.pages:
+
             text = page.extract_text()
 
             if text:
-                pages.append(text)
+                page_texts.append(text)
 
-        return "\n".join(pages)
+        return "\n".join(page_texts)
 
     except Exception:
+
         return ""
 
 
-# ---------------------------------------------------------
-# OCR FOR SCANNED PDF
-# ---------------------------------------------------------
+# =========================================================
+# OCR
+# =========================================================
 
 def extract_ocr_text(pdf_bytes):
-    """
-    Convert PDF pages into images and use Tesseract OCR.
-    This is completely free and does not require an API key.
-    """
+
+    """Read scanned/image-based PDF using Tesseract OCR."""
 
     try:
+
         images = convert_from_bytes(
             pdf_bytes,
             dpi=180,
@@ -100,9 +135,9 @@ def extract_ocr_text(pdf_bytes):
 
         progress = st.progress(0)
 
-        total_pages = len(images)
+        total = len(images)
 
-        for i, image in enumerate(images):
+        for index, image in enumerate(images):
 
             text = pytesseract.image_to_string(
                 image,
@@ -112,7 +147,9 @@ def extract_ocr_text(pdf_bytes):
             if text:
                 all_text.append(text)
 
-            progress.progress((i + 1) / total_pages)
+            progress.progress(
+                (index + 1) / total
+            )
 
         progress.empty()
 
@@ -121,8 +158,7 @@ def extract_ocr_text(pdf_bytes):
     except Exception as e:
 
         st.error(
-            "OCR could not process this PDF. "
-            "Please check that the OCR dependencies are installed."
+            "OCR could not read this PDF."
         )
 
         st.exception(e)
@@ -130,149 +166,362 @@ def extract_ocr_text(pdf_bytes):
         return ""
 
 
-# ---------------------------------------------------------
-# MAIN PDF EXTRACTION FUNCTION
-# ---------------------------------------------------------
+def extract_pdf_text(pdf_bytes):
 
-def extract_pdf_text(pdf_file):
+    """
+    First try normal text extraction.
+    If insufficient text is found, automatically use OCR.
+    """
 
-    pdf_bytes = pdf_file.getvalue()
-
-    # First try normal PDF text extraction
-    normal_text = extract_normal_pdf_text(pdf_bytes)
-
-    if len(normal_text.strip()) >= 50:
-
-        st.success("Readable text found in the PDF.")
-
-        return normal_text
-
-    # If normal extraction fails, use OCR
-    st.info(
-        "This looks like a scanned/image-based PDF. "
-        "Using free OCR to read it..."
+    normal_text = extract_normal_pdf_text(
+        pdf_bytes
     )
 
-    ocr_text = extract_ocr_text(pdf_bytes)
+    if len(normal_text.strip()) >= 80:
 
-    return ocr_text
+        return normal_text, "Text extraction"
+
+    return extract_ocr_text(
+        pdf_bytes
+    ), "OCR"
 
 
-# ---------------------------------------------------------
+# =========================================================
+# REMOVE PAPER INSTRUCTIONS / HEADERS
+# =========================================================
+
+def remove_instruction_lines(text):
+
+    lines = text.split("\n")
+
+    useful_lines = []
+
+    ignore_patterns = [
+
+        r"^\s*time\s*[:\-]?",
+        r"^\s*time allowed",
+        r"^\s*maximum marks",
+        r"^\s*max marks",
+        r"^\s*max\.\s*marks",
+        r"^\s*marks\s*[:\-]?",
+        r"^\s*note\s*[:\-]?",
+        r"^\s*instructions?\s*[:\-]?",
+        r"^\s*attempt\s+any",
+        r"^\s*attempt\s+all",
+        r"^\s*attempt\s+four",
+        r"^\s*attempt\s+five",
+        r"^\s*duration\s*[:\-]?",
+        r"^\s*date\s*[:\-]?",
+        r"^\s*roll\s*no",
+        r"^\s*enrollment",
+        r"^\s*semester\s*[:\-]?",
+        r"^\s*branch\s*[:\-]?",
+        r"^\s*subject\s*[:\-]?",
+        r"^\s*paper\s*[:\-]?",
+        r"^\s*university",
+        r"^\s*department",
+        r"^\s*b\.?tech",
+        r"^\s*end semester",
+        r"^\s*mid semester"
+    ]
+
+    for line in lines:
+
+        clean = line.strip()
+
+        if len(clean) < 3:
+            continue
+
+        should_ignore = False
+
+        for pattern in ignore_patterns:
+
+            if re.search(
+                pattern,
+                clean,
+                re.IGNORECASE
+            ):
+
+                should_ignore = True
+                break
+
+        if not should_ignore:
+
+            useful_lines.append(line)
+
+    return "\n".join(useful_lines)
+
+
+# =========================================================
 # QUESTION EXTRACTION
-# ---------------------------------------------------------
+# =========================================================
 
 def extract_questions(text):
 
-    text = re.sub(r"\r", "\n", text)
+    """
+    Detect main numbered questions.
+    Avoid treating paper instructions as questions.
+    """
 
-    # Try to detect numbered questions
-    pattern = r"(?:^|\n)\s*(?:Q(?:uestion)?\s*)?\d+\s*[\.\):\-]"
+    text = text.replace("\r", "\n")
 
-    parts = re.split(
-        pattern,
-        text,
-        flags=re.IGNORECASE
+    text = remove_instruction_lines(text)
+
+    # Normalize multiple blank lines
+    text = re.sub(
+        r"\n{2,}",
+        "\n",
+        text
+    )
+
+    # Question starts:
+    #
+    # Q1.
+    # Q1)
+    # Q.1
+    # Question 1
+    # 1.
+    # 1)
+    # 1:
+    #
+    question_pattern = re.compile(
+        r"(?:^|\n)"
+        r"\s*"
+        r"(?:"
+        r"Q(?:uestion)?\s*\.?\s*"
+        r"|"
+        r"Q\s*\.?\s*"
+        r")?"
+        r"(\d{1,2})"
+        r"\s*[\.\):\-]"
+        r"\s*",
+        re.IGNORECASE
+    )
+
+    matches = list(
+        question_pattern.finditer(text)
     )
 
     questions = []
 
-    for part in parts:
+    if matches:
 
-        part = part.strip()
+        for i, match in enumerate(matches):
 
-        if len(part) < 20:
-            continue
+            start = match.end()
 
-        part = re.sub(r"\s+", " ", part)
+            if i + 1 < len(matches):
+                end = matches[i + 1].start()
+            else:
+                end = len(text)
 
-        questions.append(part)
+            question_text = text[
+                start:end
+            ].strip()
 
-    # If numbered-question detection did not work,
-    # use longer lines as possible questions.
-    if len(questions) < 2:
+            question_text = re.sub(
+                r"\s+",
+                " ",
+                question_text
+            )
 
-        lines = re.split(r"\n+", text)
+            # Remove very short false detections
+            if len(question_text) < 25:
+                continue
 
-        questions = []
+            # Ignore obvious instruction blocks
+            lower = question_text.lower()
 
-        for line in lines:
+            instruction_words = [
+                "attempt any",
+                "attempt all",
+                "maximum marks",
+                "time allowed",
+                "instructions"
+            ]
 
-            line = line.strip()
+            if any(
+                word in lower
+                for word in instruction_words
+            ):
+                continue
 
-            if len(line) > 25:
-                questions.append(line)
+            questions.append(
+                question_text
+            )
+
+    # If no numbered questions were found,
+    # use paragraph-based extraction.
+    if len(questions) == 0:
+
+        paragraphs = re.split(
+            r"\n+",
+            text
+        )
+
+        for paragraph in paragraphs:
+
+            paragraph = re.sub(
+                r"\s+",
+                " ",
+                paragraph
+            ).strip()
+
+            if len(paragraph) < 35:
+                continue
+
+            questions.append(
+                paragraph
+            )
 
     return questions
 
 
-# ---------------------------------------------------------
-# TOPIC SIMILARITY
-# ---------------------------------------------------------
+# =========================================================
+# TOPIC MATCHING
+# =========================================================
 
-def topic_similarity(question, topic):
+def fuzzy_word_score(question, topic):
 
-    question_clean = clean_text(question)
-    topic_clean = clean_text(topic)
+    question_words = set(
+        get_words(question)
+    )
 
-    # Exact phrase match
-    if topic_clean in question_clean:
-        return 100
-
-    question_words = set(get_words(question))
-    topic_words = set(get_words(topic))
+    topic_words = set(
+        get_words(topic)
+    )
 
     if not topic_words:
         return 0
 
-    # Word overlap
-    common_words = question_words.intersection(topic_words)
-
-    overlap_score = (
-        len(common_words) / len(topic_words)
-    ) * 100
-
-    # Fuzzy matching
-    fuzzy_total = 0
+    total = 0
 
     for topic_word in topic_words:
 
-        best_match = 0
+        best = 0
 
         for question_word in question_words:
 
-            similarity = SequenceMatcher(
+            score = SequenceMatcher(
                 None,
                 topic_word,
                 question_word
             ).ratio()
 
-            if similarity > best_match:
-                best_match = similarity
+            best = max(
+                best,
+                score
+            )
 
-        fuzzy_total += best_match
+        total += best
 
-    fuzzy_score = (
-        fuzzy_total / len(topic_words)
+    return (
+        total / len(topic_words)
     ) * 100
 
-    # Final score
-    final_score = (
-        overlap_score * 0.65
-        +
-        fuzzy_score * 0.35
+
+def word_overlap_score(question, topic):
+
+    question_words = set(
+        get_words(question)
     )
 
-    return round(final_score, 2)
+    topic_words = set(
+        get_words(topic)
+    )
+
+    if not topic_words:
+        return 0
+
+    common = (
+        question_words &
+        topic_words
+    )
+
+    return (
+        len(common) /
+        len(topic_words)
+    ) * 100
 
 
-# ---------------------------------------------------------
-# FIND BEST MATCHING SYLLABUS TOPIC
-# ---------------------------------------------------------
+def tfidf_similarity(question, topic):
+
+    try:
+
+        documents = [
+            question,
+            topic
+        ]
+
+        vectorizer = TfidfVectorizer(
+            analyzer="char_wb",
+            ngram_range=(3, 5)
+        )
+
+        matrix = vectorizer.fit_transform(
+            documents
+        )
+
+        score = cosine_similarity(
+            matrix[0:1],
+            matrix[1:2]
+        )[0][0]
+
+        return score * 100
+
+    except Exception:
+
+        return 0
+
+
+def topic_similarity(question, topic):
+
+    question_clean = normalize_text(
+        question
+    )
+
+    topic_clean = normalize_text(
+        topic
+    )
+
+    # Exact phrase = very strong match
+    if topic_clean in question_clean:
+
+        return 100
+
+    word_score = word_overlap_score(
+        question,
+        topic
+    )
+
+    fuzzy_score = fuzzy_word_score(
+        question,
+        topic
+    )
+
+    tfidf_score = tfidf_similarity(
+        question,
+        topic
+    )
+
+    # Combined score
+    final_score = (
+        word_score * 0.40
+        +
+        fuzzy_score * 0.25
+        +
+        tfidf_score * 0.35
+    )
+
+    return round(
+        final_score,
+        2
+    )
+
 
 def find_best_topic(question, topics):
 
-    topic_scores = []
+    scores = []
 
     for topic in topics:
 
@@ -281,36 +530,44 @@ def find_best_topic(question, topics):
             topic
         )
 
-        topic_scores.append(
+        scores.append(
             (topic, score)
         )
 
-    topic_scores.sort(
+    scores.sort(
         key=lambda x: x[1],
         reverse=True
     )
 
-    if not topic_scores:
+    if not scores:
         return "Unclassified", 0
 
-    best_topic, best_score = topic_scores[0]
+    best_topic, best_score = scores[0]
 
-    # Minimum confidence threshold
-    if best_score < 18:
+    # More forgiving threshold for OCR
+    if best_score < 15:
+
         return "Unclassified", best_score
 
     return best_topic, best_score
 
 
-# ---------------------------------------------------------
-# ANALYZE QUESTIONS
-# ---------------------------------------------------------
+# =========================================================
+# ANALYZE ONE PAPER
+# =========================================================
 
-def analyze_questions(questions, topics):
+def analyze_paper(
+    questions,
+    topics,
+    paper_name
+):
 
     results = []
 
-    for question in questions:
+    for number, question in enumerate(
+        questions,
+        start=1
+    ):
 
         topic, score = find_best_topic(
             question,
@@ -318,134 +575,216 @@ def analyze_questions(questions, topics):
         )
 
         results.append({
+
+            "Paper": paper_name,
+
+            "Question No.": number,
+
             "Question": question,
+
             "Matched Topic": topic,
+
             "Match Score": score
         })
 
-    return pd.DataFrame(results)
-
-
-# ---------------------------------------------------------
-# GENERATE PRIORITY DATA
-# ---------------------------------------------------------
-
-def generate_priority_data(results_df, topics):
-
-    topic_counts = {
-        topic: 0
-        for topic in topics
-    }
-
-    # Count matched questions
-    for topic in results_df["Matched Topic"]:
-
-        if topic in topic_counts:
-            topic_counts[topic] += 1
-
-    data = []
-
-    total_questions = max(
-        len(results_df),
-        1
+    return pd.DataFrame(
+        results
     )
+
+
+# =========================================================
+# BUILD TOPIC STATISTICS
+# =========================================================
+
+def build_topic_statistics(
+    results_df,
+    topics,
+    number_of_papers
+):
+
+    rows = []
 
     for topic in topics:
 
-        frequency = topic_counts[topic]
+        matched = results_df[
+            results_df["Matched Topic"] == topic
+        ]
 
-        percentage = (
-            frequency / total_questions
-        ) * 100
-
-        # Priority score
-        priority_score = (
-            frequency * 10
+        question_count = len(
+            matched
         )
 
-        if priority_score >= 30:
+        paper_count = (
+            matched["Paper"]
+            .nunique()
+        )
+
+        # Percentage of papers in which topic appeared
+        paper_coverage = (
+            paper_count /
+            max(number_of_papers, 1)
+        ) * 100
+
+        # Percentage of all detected questions
+        question_frequency = (
+            question_count /
+            max(len(results_df), 1)
+        ) * 100
+
+        # Combined score
+        priority_score = (
+            paper_coverage * 0.60
+            +
+            question_frequency * 0.40
+        )
+
+        rows.append({
+
+            "Topic": topic,
+
+            "Questions": question_count,
+
+            "Papers": paper_count,
+
+            "Paper Coverage %":
+                round(
+                    paper_coverage,
+                    1
+                ),
+
+            "Question Frequency %":
+                round(
+                    question_frequency,
+                    1
+                ),
+
+            "Priority Score":
+                round(
+                    priority_score,
+                    1
+                )
+        })
+
+    df = pd.DataFrame(rows)
+
+    # Rank topics
+    df = df.sort_values(
+        by="Priority Score",
+        ascending=False
+    ).reset_index(
+        drop=True
+    )
+
+    # Assign priority based on ranking
+    # rather than requiring an arbitrary
+    # large number of questions.
+
+    total_topics = len(df)
+
+    for index in range(total_topics):
+
+        score = df.loc[
+            index,
+            "Priority Score"
+        ]
+
+        questions = df.loc[
+            index,
+            "Questions"
+        ]
+
+        if questions == 0:
+
+            priority = "Low"
+
+        elif index < max(
+            1,
+            round(total_topics * 0.30)
+        ):
+
             priority = "High"
 
-        elif priority_score >= 15:
+        elif index < max(
+            2,
+            round(total_topics * 0.70)
+        ):
+
             priority = "Medium"
 
         else:
+
             priority = "Low"
 
-        data.append({
-            "Topic": topic,
-            "Questions": frequency,
-            "Frequency %": round(percentage, 1),
-            "Priority Score": priority_score,
-            "Priority": priority
-        })
+        df.loc[
+            index,
+            "Priority"
+        ] = priority
 
-    return pd.DataFrame(data)
+    return df
 
 
-# ---------------------------------------------------------
+# =========================================================
 # REVISION PLAN
-# ---------------------------------------------------------
+# =========================================================
 
-def generate_revision_plan(priority_df):
+def build_revision_plan(
+    priority_df
+):
 
-    plan = []
+    plans = []
 
-    # High priority first
-    priority_order = {
-        "High": 1,
-        "Medium": 2,
-        "Low": 3
-    }
-
-    sorted_df = priority_df.copy()
-
-    sorted_df["Order"] = sorted_df[
-        "Priority"
-    ].map(priority_order)
-
-    sorted_df = sorted_df.sort_values(
-        by=["Order", "Questions"],
-        ascending=[True, False]
-    )
-
-    for index, row in sorted_df.iterrows():
+    for _, row in priority_df.iterrows():
 
         topic = row["Topic"]
+
         priority = row["Priority"]
+
+        questions = row["Questions"]
 
         if priority == "High":
 
             action = (
-                "Revise thoroughly + solve previous questions"
+                "Study thoroughly, revise concepts "
+                "and solve previous-year questions."
             )
 
         elif priority == "Medium":
 
             action = (
-                "Revise concepts + practice important questions"
+                "Revise concepts and practice "
+                "important questions."
             )
 
         else:
 
             action = (
-                "Quick revision after completing high-priority topics"
+                "Keep for quick revision after "
+                "high and medium priority topics."
             )
 
-        plan.append({
+        plans.append({
+
             "Topic": topic,
+
             "Priority": priority,
+
+            "Past Questions": questions,
+
             "Recommended Action": action
         })
 
-    return pd.DataFrame(plan)
+    return pd.DataFrame(
+        plans
+    )
 
 
-# ---------------------------------------------------------
+# =========================================================
 # SIDEBAR
-# ---------------------------------------------------------
+# =========================================================
 
-st.sidebar.title("⚙️ Exam Setup")
+st.sidebar.title(
+    "⚙️ Exam Setup"
+)
 
 subject = st.sidebar.text_input(
     "Subject",
@@ -457,80 +796,116 @@ exam_date = st.sidebar.date_input(
 )
 
 
-# ---------------------------------------------------------
-# MAIN TITLE
-# ---------------------------------------------------------
+# =========================================================
+# MAIN PAGE
+# =========================================================
 
-st.title("📚 Exam Intelligence Assistant")
+st.title(
+    "📚 Exam Intelligence Assistant"
+)
 
 st.write(
-    "Analyze past exam papers, identify important topics "
-    "and generate a smart revision plan."
+    "Analyze multiple past exam papers, "
+    "identify repeated syllabus topics and "
+    "generate a smart revision plan."
 )
 
 
-# ---------------------------------------------------------
-# SYLLABUS INPUT
-# ---------------------------------------------------------
+# =========================================================
+# SYLLABUS
+# =========================================================
 
-st.subheader("1️⃣ Enter Your Syllabus")
+st.subheader(
+    "1️⃣ Enter Your Syllabus"
+)
 
 syllabus_text = st.text_area(
-    "Enter syllabus topics — one topic per line",
+    "Enter one syllabus topic per line",
     height=180,
     placeholder=(
         "Example:\n"
-        "Thermodynamics\n"
-        "First Law of Thermodynamics\n"
-        "Entropy\n"
-        "Carnot Cycle"
+        "Review of successive differentiation\n"
+        "Leibnitz theorem and problems\n"
+        "Taylor's and Maclaurin's theorem\n"
+        "Asymptotes\n"
+        "Beta and gamma functions\n"
+        "Tracing curves"
     )
 )
 
 
-# ---------------------------------------------------------
-# PDF UPLOAD
-# ---------------------------------------------------------
+# =========================================================
+# MULTIPLE PDF UPLOAD
+# =========================================================
 
-st.subheader("2️⃣ Upload Past Exam Papers")
-
-uploaded_file = st.file_uploader(
-    "Upload a PDF question paper",
-    type=["pdf"]
+st.subheader(
+    "2️⃣ Upload Previous Exam Papers"
 )
 
+uploaded_files = st.file_uploader(
+    "Upload one or more PDF question papers",
+    type=["pdf"],
+    accept_multiple_files=True
+)
 
-# ---------------------------------------------------------
+if uploaded_files:
+
+    st.success(
+        f"{len(uploaded_files)} PDF(s) uploaded successfully."
+    )
+
+    st.write("**Uploaded papers:**")
+
+    for file in uploaded_files:
+
+        st.write(
+            f"📄 {file.name}"
+        )
+
+
+# =========================================================
 # ANALYZE BUTTON
-# ---------------------------------------------------------
+# =========================================================
 
 if st.button(
     "🔍 Analyze Exam Papers",
     type="primary"
 ):
 
-    # Check syllabus
+    # -----------------------------
+    # Validate syllabus
+    # -----------------------------
+
     if not syllabus_text.strip():
 
         st.warning(
-            "Please enter your syllabus topics first."
+            "Please enter your syllabus topics."
         )
 
         st.stop()
 
-    # Check PDF
-    if uploaded_file is None:
+    # -----------------------------
+    # Validate files
+    # -----------------------------
+
+    if not uploaded_files:
 
         st.warning(
-            "Please upload a past exam paper."
+            "Please upload at least one PDF."
         )
 
         st.stop()
 
-    # Convert syllabus into list
+    # -----------------------------
+    # Convert syllabus to list
+    # -----------------------------
+
     topics = [
+
         topic.strip()
+
         for topic in syllabus_text.split("\n")
+
         if topic.strip()
     ]
 
@@ -542,113 +917,169 @@ if st.button(
 
         st.stop()
 
-    # Extract text
-    with st.spinner(
-        "Reading your question paper..."
-    ):
+    # -----------------------------
+    # Analyze all papers
+    # -----------------------------
 
-        extracted_text = extract_pdf_text(
-            uploaded_file
-        )
+    all_results = []
 
-    # Check extracted text
-    if not extracted_text.strip():
-
-        st.error(
-            "No readable text could be extracted from "
-            "this PDF."
-        )
-
-        st.stop()
-
-    # Extract questions
-    questions = extract_questions(
-        extracted_text
+    st.header(
+        "📄 Paper Processing"
     )
 
-    if len(questions) == 0:
+    for file in uploaded_files:
 
-        st.error(
-            "Questions could not be detected from this PDF."
+        st.write(
+            f"**Processing:** {file.name}"
         )
 
-        st.stop()
+        pdf_bytes = file.getvalue()
 
-    st.success(
-        f"Successfully extracted approximately "
-        f"{len(questions)} questions."
-    )
+        extracted_text, method = (
+            extract_pdf_text(
+                pdf_bytes
+            )
+        )
 
-    # Analyze
-    with st.spinner(
-        "Analyzing questions and matching them with your syllabus..."
-    ):
+        if not extracted_text.strip():
 
-        results_df = analyze_questions(
+            st.warning(
+                f"No readable text found in {file.name}."
+            )
+
+            continue
+
+        questions = extract_questions(
+            extracted_text
+        )
+
+        st.write(
+            f"Detected {len(questions)} "
+            f"main questions using {method}."
+        )
+
+        if len(questions) == 0:
+
+            st.warning(
+                f"Could not detect questions in "
+                f"{file.name}."
+            )
+
+            continue
+
+        paper_results = analyze_paper(
             questions,
-            topics
+            topics,
+            file.name
         )
 
-        priority_df = generate_priority_data(
-            results_df,
-            topics
+        all_results.append(
+            paper_results
         )
 
-        revision_df = generate_revision_plan(
-            priority_df
+    # -----------------------------
+    # Check results
+    # -----------------------------
+
+    if not all_results:
+
+        st.error(
+            "No questions could be extracted "
+            "from the uploaded papers."
         )
 
-    # -----------------------------------------------------
-    # RESULTS
-    # -----------------------------------------------------
+        st.stop()
+
+    results_df = pd.concat(
+        all_results,
+        ignore_index=True
+    )
+
+    # -----------------------------
+    # Topic statistics
+    # -----------------------------
+
+    priority_df = build_topic_statistics(
+        results_df,
+        topics,
+        len(uploaded_files)
+    )
+
+    revision_df = build_revision_plan(
+        priority_df
+    )
+
+    # =====================================================
+    # DASHBOARD
+    # =====================================================
 
     st.divider()
 
-    st.header("📊 Exam Analysis")
+    st.header(
+        "📊 Exam Intelligence Dashboard"
+    )
 
-    col1, col2, col3 = st.columns(3)
+    col1, col2, col3, col4 = st.columns(4)
 
     with col1:
+
         st.metric(
-            "Questions Found",
-            len(questions)
+            "Papers Analyzed",
+            len(uploaded_files)
         )
 
     with col2:
+
+        st.metric(
+            "Questions Detected",
+            len(results_df)
+        )
+
+    with col3:
+
         st.metric(
             "Syllabus Topics",
             len(topics)
         )
 
-    with col3:
-        high_topics = len(
+    with col4:
+
+        high_count = len(
             priority_df[
-                priority_df["Priority"] == "High"
+                priority_df["Priority"]
+                == "High"
             ]
         )
 
         st.metric(
             "High Priority Topics",
-            high_topics
+            high_count
         )
 
-
-    # -----------------------------------------------------
+    # =====================================================
     # TOPIC FREQUENCY
-    # -----------------------------------------------------
+    # =====================================================
 
-    st.subheader("📈 Topic Frequency")
+    st.subheader(
+        "📈 Topic Frequency Across Papers"
+    )
 
     chart_df = priority_df[
-        ["Topic", "Questions"]
+        [
+            "Topic",
+            "Questions"
+        ]
     ].copy()
 
     fig = px.bar(
         chart_df,
         x="Topic",
         y="Questions",
-        title="How Frequently Each Topic Appears",
-        text="Questions"
+        text="Questions",
+        title=(
+            "How Often Each Syllabus Topic "
+            "Appeared in Previous Papers"
+        )
     )
 
     fig.update_layout(
@@ -660,34 +1091,37 @@ if st.button(
         use_container_width=True
     )
 
-
-    # -----------------------------------------------------
+    # =====================================================
     # PRIORITY TABLE
-    # -----------------------------------------------------
+    # =====================================================
 
-    st.subheader("🎯 Topic Priority")
-
-    display_priority = priority_df[
-        [
-            "Topic",
-            "Questions",
-            "Frequency %",
-            "Priority"
-        ]
-    ]
+    st.subheader(
+        "🎯 Topic Priority"
+    )
 
     st.dataframe(
-        display_priority,
+        priority_df[
+            [
+                "Topic",
+                "Questions",
+                "Papers",
+                "Paper Coverage %",
+                "Question Frequency %",
+                "Priority Score",
+                "Priority"
+            ]
+        ],
         use_container_width=True,
         hide_index=True
     )
 
-
-    # -----------------------------------------------------
+    # =====================================================
     # REVISION PLAN
-    # -----------------------------------------------------
+    # =====================================================
 
-    st.subheader("📝 Smart Revision Plan")
+    st.subheader(
+        "📝 Smart Revision Plan"
+    )
 
     st.dataframe(
         revision_df,
@@ -695,54 +1129,115 @@ if st.button(
         hide_index=True
     )
 
+    # =====================================================
+    # HIGH PRIORITY TOPICS
+    # =====================================================
 
-    # -----------------------------------------------------
-    # QUESTION-TO-TOPIC MAPPING
-    # -----------------------------------------------------
+    high_topics = priority_df[
+        priority_df["Priority"] == "High"
+    ]
 
-    st.subheader("🔗 Question → Topic Mapping")
+    if len(high_topics) > 0:
+
+        st.subheader(
+            "🔥 Focus on These Topics First"
+        )
+
+        for _, row in high_topics.iterrows():
+
+            st.write(
+                f"🔴 **{row['Topic']}** — "
+                f"appeared in "
+                f"{row['Papers']} paper(s) "
+                f"with {row['Questions']} "
+                f"detected question(s)."
+            )
+
+    # =====================================================
+    # MEDIUM PRIORITY
+    # =====================================================
+
+    medium_topics = priority_df[
+        priority_df["Priority"] == "Medium"
+    ]
+
+    if len(medium_topics) > 0:
+
+        st.subheader(
+            "🟡 Next Priority"
+        )
+
+        for _, row in medium_topics.iterrows():
+
+            st.write(
+                f"🟡 **{row['Topic']}**"
+            )
+
+    # =====================================================
+    # QUESTION MAPPING
+    # =====================================================
+
+    st.subheader(
+        "🔗 Question → Topic Mapping"
+    )
 
     st.dataframe(
-        results_df,
+        results_df[
+            [
+                "Paper",
+                "Question No.",
+                "Question",
+                "Matched Topic",
+                "Match Score"
+            ]
+        ],
         use_container_width=True,
         hide_index=True
     )
 
+    # =====================================================
+    # UNCLASSIFIED QUESTIONS
+    # =====================================================
 
-    # -----------------------------------------------------
-    # IMPORTANT TOPICS
-    # -----------------------------------------------------
+    unclassified = results_df[
+        results_df["Matched Topic"]
+        == "Unclassified"
+    ]
 
-    high_priority_topics = priority_df[
-        priority_df["Priority"] == "High"
-    ]["Topic"].tolist()
+    if len(unclassified) > 0:
 
-    if high_priority_topics:
-
-        st.subheader("🔥 Focus on These Topics First")
-
-        for topic in high_priority_topics:
-
-            st.write(
-                f"• **{topic}**"
-            )
-
-    else:
-
-        st.info(
-            "No high-priority topics were detected. "
-            "Try uploading more previous papers for better analysis."
+        st.subheader(
+            "⚠️ Questions That Need Better Matching"
         )
 
+        st.info(
+            f"{len(unclassified)} question(s) "
+            "could not be confidently matched "
+            "to your syllabus."
+        )
 
-    # -----------------------------------------------------
+        st.dataframe(
+            unclassified[
+                [
+                    "Paper",
+                    "Question No.",
+                    "Question",
+                    "Match Score"
+                ]
+            ],
+            use_container_width=True,
+            hide_index=True
+        )
+
+    # =====================================================
     # EXAM INFORMATION
-    # -----------------------------------------------------
+    # =====================================================
 
     st.divider()
 
     st.caption(
-        f"Subject: {subject if subject else 'Not specified'}"
+        f"Subject: "
+        f"{subject if subject else 'Not specified'}"
     )
 
     st.caption(
