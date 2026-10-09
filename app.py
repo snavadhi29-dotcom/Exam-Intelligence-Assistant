@@ -24,38 +24,87 @@ st.set_page_config(
 )
 
 st.markdown("""
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;450;500;600;700&family=Libre+Baskerville:wght@400;700&display=swap" rel="stylesheet">
 <style>
-@import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Manrope:wght@500;600;700;800&display=swap');
-:root{--ink:#202544;--muted:#69738c;--line:#e6eaf3;--violet:#6558d9;--blue:#4776e6;--surface:#fff}
-.stApp{background:radial-gradient(ellipse at 8% 0%,#eceeff 0,transparent 32%),linear-gradient(145deg,#f7f8fc 0%,#fbfcff 55%,#f1f4ff 100%);color:var(--ink);font-family:'DM Sans',sans-serif}
-.block-container{max-width:1500px;padding-top:1.2rem;padding-bottom:3rem}
-h1,h2,h3,h4{font-family:'Manrope','DM Sans',sans-serif!important;letter-spacing:-.035em;color:#202544}
-h1{font-weight:800!important} h2{font-weight:750!important} h3{font-weight:700!important}
-p, label, .stCaption{color:#5f6982}
-section[data-testid="stSidebar"]{background:linear-gradient(180deg,#171b39 0%,#26245a 100%)}
-section[data-testid="stSidebar"] h1,section[data-testid="stSidebar"] h2,section[data-testid="stSidebar"] h3,section[data-testid="stSidebar"] p,section[data-testid="stSidebar"] label,section[data-testid="stSidebar"] span{color:#f4f5ff!important}
-div[data-testid="stMetric"]{background:rgba(255,255,255,.9);border:1px solid #e4e8f3;border-radius:18px;padding:17px 18px;box-shadow:0 8px 24px rgba(38,48,91,.05);min-height:105px}
-div[data-testid="stMetric"] label{color:#707a93!important;font-size:.8rem!important;font-weight:700!important}
-div[data-testid="stMetric"] [data-testid="stMetricValue"]{color:#25284f;font-family:'Manrope',sans-serif;font-weight:800}
-.stSelectbox>div>div,.stTextInput>div>div,.stDateInput>div>div,.stNumberInput>div>div,.stTextArea textarea{border-radius:12px!important;border-color:#dfe4f1!important;background:#fff}
-.stButton>button,.stDownloadButton>button{border-radius:12px;border:1px solid #5d56cf;background:linear-gradient(115deg,#6156d9,#4776e6);color:#fff;font-weight:700;padding:.58rem 1rem;box-shadow:0 6px 16px rgba(87,91,210,.17);transition:transform .16s ease,box-shadow .16s ease}
-.stButton>button:hover,.stDownloadButton>button:hover{color:#fff;transform:translateY(-1px);box-shadow:0 10px 22px rgba(87,91,210,.23)}
-div[data-testid="stDataFrame"]{background:#fff;border:1px solid #e5e8f2;border-radius:15px;overflow:hidden}
-div[data-testid="stAlert"]{border-radius:14px;border:1px solid #e4e8f5}
-div[data-testid="stVerticalBlockBorderWrapper"]{background:rgba(255,255,255,.72);border:1px solid #e4e8f4;border-radius:18px;padding:5px;box-shadow:0 7px 22px rgba(38,48,91,.035)}
-div[role="radiogroup"]{gap:8px}
-div[role="radiogroup"] label{background:#fff;border:1px solid #e1e5f1;border-radius:12px;padding:9px 14px;transition:all .15s ease}
-div[role="radiogroup"] label:has(input:checked){background:#eeedff;border-color:#b9b3fa;color:#493fc0}
-.stProgress>div>div>div>div{background:linear-gradient(90deg,#6558d9,#4c91ed);border-radius:999px}
-hr{border-color:#e5e9f3;margin:1.4rem 0}
-.hero{position:relative;overflow:hidden;background:linear-gradient(115deg,#171b39 0%,#343179 55%,#6558d9 100%);padding:30px 32px;border-radius:24px;color:#fff;margin-bottom:22px;box-shadow:0 16px 38px rgba(50,49,126,.17)}
-.hero:after{content:'';position:absolute;width:230px;height:230px;right:-55px;top:-100px;border:1px solid rgba(255,255,255,.2);border-radius:50%;box-shadow:0 0 0 28px rgba(255,255,255,.045),0 0 0 58px rgba(255,255,255,.03)}
-.hero h1{color:#fff!important;font-size:2rem!important;margin:5px 0 8px 0!important;position:relative;z-index:1}
-.hero p{color:#e2e6ff!important;margin:0;max-width:760px;font-size:.98rem;position:relative;z-index:1}
-.eyebrow{font-size:.7rem;font-weight:800;letter-spacing:.16em;text-transform:uppercase;color:#c9ceff}
-.page-intro{padding:4px 0 8px 0}.page-intro p{color:#737d96;margin-top:-8px}
-.section-label{font-size:.7rem;font-weight:800;letter-spacing:.14em;text-transform:uppercase;color:#7771d6;margin-bottom:3px}
-@media(max-width:700px){.block-container{padding-left:1rem;padding-right:1rem}.hero{padding:23px 20px}.hero h1{font-size:1.55rem!important}}
+:root {
+ --background:#f5f7fb; --surface:#ffffff; --ink:#20283f;
+ --muted:#64708a; --line:#e1e6ef; --primary:#4263eb;
+ --primary-hover:#3451cf; --teal:#0b8f8a; --purple:#7957c6;
+ --midnight:#11192e; --sidebar-text:#e6ecfa; --sidebar-muted:#aab7d2;
+ --tint:#eef2ff; --success:#e9f7f4; --shadow:0 4px 16px #18264708;
+ --font-body:'IBM Plex Sans',sans-serif;
+ --font-heading:'Libre Baskerville',Georgia,serif;
+}
+.stApp {background:var(--background);color:var(--ink)}
+html,body,[class*="css"],.stApp,p,label,input,textarea,button {font-family:var(--font-body)}
+.block-container {max-width:1360px;padding:2.4rem 3rem 3rem}
+h1,h2,h3,h4 {color:var(--ink);letter-spacing:0!important}
+h1,h2 {font-family:var(--font-heading)!important}
+h1 {font-size:2rem!important;line-height:1.4!important;font-weight:400!important}
+h2 {font-size:1.5rem!important;font-weight:400!important}
+h3 {font-family:var(--font-body)!important;font-size:1.08rem!important;font-weight:600!important}
+p,label,.stCaption {color:var(--muted)}
+[data-testid="stHeader"] {background:var(--background)}
+section[data-testid="stSidebar"] {background:var(--midnight);border-right:1px solid var(--line)}
+section[data-testid="stSidebar"]>div {padding-top:1.8rem}
+section[data-testid="stSidebar"] h1,section[data-testid="stSidebar"] h2,
+section[data-testid="stSidebar"] h3,section[data-testid="stSidebar"] p,
+section[data-testid="stSidebar"] label,section[data-testid="stSidebar"] span {color:var(--sidebar-text)!important}
+section[data-testid="stSidebar"] [data-testid="stCaptionContainer"] p {color:var(--sidebar-muted)!important}
+.sidebar-brand {display:flex;gap:12px;align-items:center;margin-bottom:32px}
+.brand-mark {display:grid;place-items:center;width:40px;height:40px;background:var(--primary);color:var(--surface);border-radius:8px;font-weight:700;font-size:22px}
+.brand-name {font-weight:600;font-size:18px;color:var(--sidebar-text);line-height:1.4}
+.brand-name small {display:block;font-size:11px;font-weight:400;color:var(--sidebar-muted)}
+.sidebar-label {font-size:11px;font-weight:600;color:var(--sidebar-muted);margin:24px 0 10px}
+section[data-testid="stSidebar"] [role="radiogroup"] {gap:6px}
+section[data-testid="stSidebar"] [role="radiogroup"] label {width:100%;border:1px solid transparent;padding:12px 14px;border-radius:6px;transition:background .16s}
+section[data-testid="stSidebar"] [role="radiogroup"] label:hover {background:color-mix(in srgb,var(--primary) 15%,var(--midnight))}
+section[data-testid="stSidebar"] [role="radiogroup"] label:has(input:checked) {background:color-mix(in srgb,var(--primary) 23%,var(--midnight));border-color:color-mix(in srgb,var(--primary) 40%,var(--midnight))}
+.workspace-top {display:flex;justify-content:space-between;align-items:center;gap:12px;border-bottom:1px solid var(--line);padding-bottom:18px;margin-bottom:28px;color:var(--muted);font-size:12px}
+.workspace-status {display:flex;align-items:center;gap:8px;white-space:nowrap}
+.status-dot {width:6px;height:6px;border-radius:50%;background:var(--teal)}
+.hero {padding:0 0 22px;margin:0;background:none;border-radius:0;box-shadow:none}
+.hero h1 {margin:8px 0!important;color:var(--ink)!important}
+.hero p {max-width:720px;font-size:14px;color:var(--muted);line-height:1.7;margin:0}
+.eyebrow {color:var(--teal);font-size:11px;font-weight:600}
+.section-label {font-size:11px;font-weight:600;color:var(--primary);margin:20px 0 8px}
+.summary-strip {display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:20px;border-top:1px solid var(--line);border-bottom:1px solid var(--line);padding:20px 0;margin:4px 0 24px}
+.summary-item {padding-left:16px;border-left:3px solid var(--primary)}
+.summary-item:nth-child(2) {border-color:var(--teal)}
+.summary-item:nth-child(3) {border-color:var(--purple)}
+.summary-item span {display:block;font-size:12px;color:var(--muted);margin-bottom:4px}
+.summary-item strong {font-weight:600;font-size:24px;color:var(--ink)}
+[data-testid="stMetric"] {background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:18px 20px;box-shadow:var(--shadow);min-height:112px}
+[data-testid="stMetric"] label {font-size:12px!important;font-weight:500!important}
+[data-testid="stMetricValue"] {font-family:var(--font-body);font-size:28px;font-weight:600;color:var(--ink)}
+[data-testid="stVerticalBlockBorderWrapper"]>div {background:var(--surface);border-radius:8px}
+[data-testid="stVerticalBlockBorderWrapper"] {border-radius:8px!important;border-color:var(--line)!important}
+.stTextInput input,.stTextArea textarea,.stDateInput input {color:var(--ink)!important;line-height:1.6}
+.stTextInput>div>div,.stDateInput>div>div,.stNumberInput>div>div,.stSelectbox>div>div,.stTextArea textarea {background:var(--surface)!important;border-color:var(--line)!important;border-radius:6px!important}
+.stTextInput>div>div:focus-within,.stTextArea textarea:focus {border-color:var(--primary)!important;box-shadow:0 0 0 3px var(--tint)!important}
+.stButton>button,.stDownloadButton>button {min-height:42px;border-radius:6px!important;font-size:13px;font-weight:600;border:1px solid var(--line);background:var(--surface);color:var(--ink);transition:background .16s,border-color .16s}
+.stButton>button p,.stDownloadButton>button p {color:inherit!important}
+.stButton>button:hover,.stDownloadButton>button:hover {border-color:var(--primary);color:var(--primary);background:var(--tint)}
+.stButton>button[kind="primary"] {background:var(--primary);border-color:var(--primary);color:var(--surface)}
+.stButton>button[kind="primary"]:hover {background:var(--primary-hover);color:var(--surface)}
+[data-testid="stFileUploaderDropzone"] {background:var(--background);border:1px dashed var(--line);border-radius:6px;padding:24px 16px}
+[data-testid="stFileUploaderDropzone"] button {background:var(--surface);border:1px solid var(--line);border-radius:6px}
+[data-testid="stDataFrame"] {border:1px solid var(--line);border-radius:8px;overflow:hidden}
+[data-testid="stAlert"] {border-radius:6px;border:1px solid var(--line)}
+[data-testid="stProgress"]>div>div>div>div {background:var(--teal)!important;border-radius:4px}
+[data-testid="stCheckbox"] {padding:6px 0}
+[data-testid="stCheckbox"] label p {color:var(--ink)}
+hr {border-color:var(--line)!important;margin:24px 0}
+.empty-workspace {text-align:center;padding:40px 20px 32px;border-top:1px solid var(--line)}
+.empty-symbol {display:inline-grid;place-items:center;width:52px;height:52px;border:1px solid var(--line);border-radius:8px;background:var(--surface);color:var(--primary);font-size:26px;margin-bottom:12px}
+.empty-workspace h3 {margin:8px 0!important}
+.empty-workspace p {font-size:13px}
+.footer-note {border-top:1px solid var(--line);margin-top:32px;padding-top:18px;display:flex;justify-content:space-between;gap:16px;font-size:11px;color:var(--muted)}
+@media(max-width:900px) {.block-container{padding:1.8rem 1.3rem}h1{font-size:1.6rem!important}.summary-strip{gap:12px}.summary-item{padding-left:10px}.workspace-status{display:none}}
+@media(max-width:500px) {.summary-strip{grid-template-columns:1fr;gap:16px}.footer-note{flex-direction:column}.workspace-top{font-size:11px}}
+@media(prefers-reduced-motion:reduce) {*{transition:none!important;animation:none!important}}
 </style>
 """, unsafe_allow_html=True)
 
@@ -803,47 +852,55 @@ def build_timetable(analysis, daily_hours):
 
 
 # =========================================================
-# HEADER
+# WORKSPACE SHELL AND NAVIGATION
 # =========================================================
 
-st.markdown("""
-<div class="hero">
-  <div class="eyebrow">PERSONAL ACADEMIC ANALYTICS</div>
-  <h1>Exam Intelligence Assistant</h1>
-  <p>Turn previous-year papers into clearer priorities, useful exam patterns, and a study plan you can actually follow.</p>
-</div>
-""", unsafe_allow_html=True)
+# Apply automatic navigation before the radio widget is instantiated.
+if "pending_dashboard" in st.session_state:
+    st.session_state.active_dashboard = st.session_state.pop("pending_dashboard")
 
-with st.sidebar:
-    st.header("Study Settings")
-    daily_hours = st.slider(
-        "Available study hours per day",
-        1, 12, 4
-    )
-    st.caption("Free analysis. No paid AI API required.")
-
-
-# =========================================================
-# AUTOMATIC DASHBOARD NAVIGATION
-# =========================================================
-
-dashboard_names = [
-    "Subjects & Setup",
-    "Exam Intelligence",
-    "Study Planner"
-]
-
+dashboard_names = ["Subjects & Setup", "Exam Intelligence", "Study Planner"]
 if st.session_state.active_dashboard not in dashboard_names:
     st.session_state.active_dashboard = dashboard_names[0]
 
-active_dashboard = st.radio(
-    "Navigate dashboard",
-    dashboard_names,
-    horizontal=True,
-    key="active_dashboard",
-    label_visibility="collapsed"
-)
+with st.sidebar:
+    st.markdown("""
+    <div class="sidebar-brand"><div class="brand-mark">E</div>
+    <div class="brand-name">Exam Intelligence<small>YOUR STUDY WORKSPACE</small></div></div>
+    <div class="sidebar-label">WORKSPACE</div>
+    """, unsafe_allow_html=True)
+    active_dashboard = st.radio(
+        "Navigate dashboard", dashboard_names,
+        key="active_dashboard", label_visibility="collapsed"
+    )
+    st.divider()
+    st.markdown('<div class="sidebar-label">DAILY STUDY TARGET</div>', unsafe_allow_html=True)
+    daily_hours = st.slider("Available study hours per day", 1, 12, 4)
+    st.caption(f"{daily_hours} hours available each day")
+    st.divider()
+    st.caption("Local text analysis · No AI API required")
+    st.caption("Your workspace lasts for this browser session.")
 
+st.markdown("""
+<div class="workspace-top"><span>WORKSPACE / EXAM INTELLIGENCE ASSISTANT</span>
+<span class="workspace-status"><span class="status-dot"></span>Local analysis</span></div>
+<div class="hero">
+  <div class="eyebrow">A LITTLE CLARITY. A BETTER STUDY PLAN.</div>
+  <h1>Exam Intelligence Assistant</h1>
+  <p>Your subjects, question patterns, and study priorities — together in one workspace.</p>
+</div>
+""", unsafe_allow_html=True)
+
+subject_count = len(st.session_state.subjects)
+paper_count = sum(len(st.session_state.get(f"files_{s['id']}", []) or []) for s in st.session_state.subjects)
+question_count = sum(len(s["questions"]) for s in st.session_state.analysis)
+st.markdown(f"""
+<div class="summary-strip">
+<div class="summary-item"><span>Subjects in workspace</span><strong>{subject_count:02d}</strong></div>
+<div class="summary-item"><span>Papers uploaded</span><strong>{paper_count:02d}</strong></div>
+<div class="summary-item"><span>Questions analyzed</span><strong>{question_count:02d}</strong></div>
+</div>
+""", unsafe_allow_html=True)
 
 # =========================================================
 # DASHBOARD 1: SUBJECTS & SETUP
@@ -857,7 +914,7 @@ if active_dashboard == "Subjects & Setup":
         "and upload all relevant previous-year papers."
     )
 
-    if st.button("➕ Add Subject", type="primary"):
+    if st.button("Add subject", type="primary", icon=":material/add:"):
         sid = st.session_state.next_id
         st.session_state.next_id += 1
 
@@ -870,13 +927,17 @@ if active_dashboard == "Subjects & Setup":
         st.rerun()
 
     if not st.session_state.subjects:
-        st.info("Start by clicking Add Subject.")
+        st.markdown("""
+        <div class="empty-workspace"><div class="empty-symbol">＋</div>
+        <h3>Your workspace starts here</h3>
+        <p>No subjects or question papers yet.</p></div>
+        """, unsafe_allow_html=True)
 
     for index, subject in enumerate(st.session_state.subjects):
         sid = subject["id"]
 
         with st.container(border=True):
-            st.subheader(f"Subject {index + 1}")
+            st.subheader(f"{index + 1:02d} / Subject details")
 
             c1, c2 = st.columns([2, 1])
 
@@ -884,7 +945,8 @@ if active_dashboard == "Subjects & Setup":
                 name = st.text_input(
                     "Subject name",
                     value=subject["name"],
-                    key=f"name_{sid}"
+                    key=f"name_{sid}",
+                    placeholder="e.g. Engineering Mathematics"
                 )
 
             with c2:
@@ -897,7 +959,8 @@ if active_dashboard == "Subjects & Setup":
             topics = st.text_area(
                 "Syllabus topics (one per line)",
                 value=subject["topics"],
-                height=130,
+                height=160,
+                placeholder="Successive differentiation\nTaylor and Maclaurin series\nMatrices and eigenvalues",
                 key=f"topics_{sid}"
             )
 
@@ -916,7 +979,7 @@ if active_dashboard == "Subjects & Setup":
             c3, c4 = st.columns(2)
 
             with c3:
-                if st.button("Save Subject", key=f"save_{sid}"):
+                if st.button("Save subject", key=f"save_{sid}", icon=":material/check:"):
                     if not name.strip() or not topics.strip():
                         st.error("Enter a subject name and syllabus.")
                     else:
@@ -935,7 +998,7 @@ if active_dashboard == "Subjects & Setup":
                             st.success("Subject saved.")
 
             with c4:
-                if st.button("Remove Subject", key=f"remove_{sid}"):
+                if st.button("Remove subject", key=f"remove_{sid}", icon=":material/delete:"):
                     st.session_state.subjects = [
                         s for s in st.session_state.subjects
                         if s["id"] != sid
@@ -947,7 +1010,8 @@ if active_dashboard == "Subjects & Setup":
     st.divider()
 
     if st.button(
-        "🚀 Analyze All Subjects",
+        "Analyze all subjects",
+        icon=":material/analytics:",
         type="primary",
         use_container_width=True
     ):
@@ -1012,7 +1076,7 @@ if active_dashboard == "Subjects & Setup":
             st.session_state.analysis = analyses
 
             # Automatically switch to the analysis dashboard.
-            st.session_state.active_dashboard = "Exam Intelligence"
+            st.session_state.pending_dashboard = "Exam Intelligence"
             st.rerun()
 
 
@@ -1073,13 +1137,13 @@ elif active_dashboard == "Exam Intelligence":
         )
         z.metric("Papers analyzed", questions["Paper"].nunique())
 
-        st.subheader("🔥 Topic Frequency")
+        st.subheader("Topic frequency")
         chart = topics[topics["Questions"] > 0].set_index("Topic")[
             ["Questions"]
         ]
 
         if not chart.empty:
-            st.bar_chart(chart, horizontal=True)
+            st.bar_chart(chart, horizontal=True, color="#4263eb")
         else:
             st.warning("No topics have been matched yet.")
 
@@ -1092,11 +1156,11 @@ elif active_dashboard == "Exam Intelligence":
         )
 
         st.subheader("Question Type Pattern")
-        st.bar_chart(questions["Question Type"].value_counts())
+        st.bar_chart(questions["Question Type"].value_counts(), color="#0b8f8a")
 
         st.subheader("Difficulty Distribution")
         st.bar_chart(
-            questions["Difficulty (estimated)"].value_counts()
+            questions["Difficulty (estimated)"].value_counts(), color="#7957c6"
         )
 
         st.subheader("Question Mapping")
@@ -1132,7 +1196,8 @@ elif active_dashboard == "Exam Intelligence":
         )
 
         st.download_button(
-            "📥 Download mapping CSV",
+            "Export question mapping",
+            icon=":material/download:",
             data=questions.to_csv(index=False).encode("utf-8"),
             file_name="question_mapping.csv",
             mime="text/csv"
@@ -1308,14 +1373,14 @@ elif active_dashboard == "Study Planner":
             )
 
             st.download_button(
-                "📥 Download timetable CSV",
+                "Export study timetable",
+                icon=":material/download:",
                 data=export.to_csv(index=False).encode("utf-8"),
                 file_name="study_timetable.csv",
                 mime="text/csv"
             )
 
-st.divider()
-st.caption(
-    "Exam Intelligence Assistant | Free text analysis | "
-    "Always verify low-confidence topic matches."
-)
+st.markdown("""
+<div class="footer-note"><span>Exam Intelligence Assistant</span>
+<span>Similarity scores are estimates. Verify uncertain matches.</span></div>
+""", unsafe_allow_html=True)
