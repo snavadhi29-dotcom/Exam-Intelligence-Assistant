@@ -519,7 +519,7 @@ def classify_question(question):
             q,
         )
         or re.search(
-            r"\b\d+(?:\.\d+)?\s*(
+            r"\b\d+(?:\.\d+)?"\s*(
             # ---------------- SIDEBAR ----------------
 
 with st.sidebar:
