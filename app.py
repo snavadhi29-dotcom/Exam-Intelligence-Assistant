@@ -6,6 +6,7 @@ import hashlib
 from io import BytesIO
 from datetime import date, timedelta
 from difflib import SequenceMatcher
+from collections import Counter
 
 from pypdf import PdfReader
 from sklearn.feature_extraction.text import TfidfVectorizer
@@ -13,55 +14,38 @@ from sklearn.metrics.pairwise import cosine_similarity
 
 
 # =========================================================
-# CONFIGURATION AND STYLE
+# PAGE CONFIGURATION
 # =========================================================
 
 st.set_page_config(
     page_title="Exam Intelligence Assistant",
     page_icon="🎓",
-    layout="wide",
-    initial_sidebar_state="expanded"
+    layout="wide"
 )
 
 st.markdown("""
 <style>
 .stApp {
-    background: linear-gradient(145deg, #f5f7ff 0%, #ffffff 65%);
+    background: linear-gradient(140deg, #f5f7ff, #ffffff 65%);
 }
 .block-container {
-    padding-top: 1.7rem;
-    padding-bottom: 3rem;
+    padding-top: 1.5rem;
     max-width: 1450px;
 }
 .hero {
+    background: linear-gradient(120deg, #172554, #4338ca, #7c3aed);
     padding: 28px;
     border-radius: 20px;
     color: white;
-    background: linear-gradient(115deg, #172554, #4338ca, #7c3aed);
     margin-bottom: 22px;
 }
-.hero h1 {
-    color: white;
-    font-size: 2.2rem;
-    margin-bottom: 8px;
-}
-.hero p {
-    color: #e0e7ff;
-    margin-bottom: 0;
-}
+.hero h1 { color: white; }
+.hero p { color: #e0e7ff; }
 div[data-testid="stMetric"] {
     background: white;
-    border: 1px solid #e4e7f0;
-    padding: 16px;
-    border-radius: 15px;
-    box-shadow: 0 3px 12px rgba(35, 45, 90, 0.04);
-}
-div[data-testid="stVerticalBlockBorderWrapper"] {
-    border-radius: 16px;
-}
-.small-note {
-    color: #64748b;
-    font-size: 0.9rem;
+    border: 1px solid #e2e8f0;
+    border-radius: 14px;
+    padding: 14px;
 }
 </style>
 """, unsafe_allow_html=True)
@@ -71,21 +55,19 @@ div[data-testid="stVerticalBlockBorderWrapper"] {
 # SESSION STATE
 # =========================================================
 
-defaults = {
+for key, default in {
     "subjects": [],
     "next_id": 1,
     "analysis": [],
     "completed_tasks": set(),
-    "analysis_signature": None
-}
-
-for key, value in defaults.items():
+    "active_dashboard": "Subjects & Setup"
+}.items():
     if key not in st.session_state:
-        st.session_state[key] = value
+        st.session_state[key] = default
 
 
 # =========================================================
-# TEXT UTILITIES
+# TEXT NORMALIZATION AND MATCHING HELPERS
 # =========================================================
 
 STOP_WORDS = {
@@ -97,66 +79,112 @@ STOP_WORDS = {
     "as", "by", "at", "it", "its", "let", "where",
     "which", "then", "also", "following", "any", "all",
     "question", "questions", "marks", "attempt", "answer",
-    "using", "obtain", "hence", "show", "calculate"
+    "obtain", "hence", "using", "show", "calculate",
+    "each", "every", "function", "given", "following"
+}
+
+# Common mathematical and academic variations.
+SYNONYMS = {
+    "asymptote": ["asymptotes", "asymptotic"],
+    "curve": ["curves", "tracing", "trace", "traced"],
+    "differentiate": ["differentiation", "derivative", "derivatives"],
+    "successive": ["repeated", "higher order", "higher-order"],
+    "taylor": ["taylor's", "taylor series"],
+    "maclaurin": ["maclaurin's", "maclaurin series"],
+    "expansion": ["series", "expand"],
+    "curvature": ["radius of curvature", "curvature radius"],
+    "polar": ["polar coordinates", "polar form"],
+    "cartesian": ["cartesian coordinates", "rectangular coordinates"],
+    "parametric": ["parametric equations", "parameter"],
+    "beta": ["beta function"],
+    "gamma": ["gamma function"],
+    "leibnitz": ["leibniz", "leibnitz theorem", "leibniz theorem"],
+    "theorem": ["theorem", "theorems"],
+    "integration": ["integral", "integrals", "integrate"],
+    "matrix": ["matrices"],
+    "eigenvalue": ["eigenvalues"],
+    "eigenvector": ["eigenvectors"],
+    "differential": ["differential equation", "differential equations"],
+    "probability": ["probability distribution", "probability distributions"],
+    "electrochemistry": ["electrochemical"],
+    "corrosion": ["rusting", "corrosion prevention"],
+    "polymer": ["polymers", "polymeric"],
+    "thermodynamics": ["thermodynamic"],
+    "semiconductor": ["semiconductors"],
+    "diode": ["diodes", "pn junction", "p-n junction"],
 }
 
 def normalize(text):
     text = str(text).lower()
     text = text.replace("’", "'")
-    text = text.replace("–", "-").replace("—", "-")
-    text = re.sub(r"\s+", " ", text)
-    return text.strip()
+    text = text.replace("–", " ").replace("—", " ")
+    text = text.replace("&", " and ")
+    text = re.sub(r"[^a-z0-9]+", " ", text)
+    return re.sub(r"\s+", " ", text).strip()
 
 
-def words(text):
-    result = re.findall(r"[a-zA-Z]+", normalize(text))
-    result = [
-        w for w in result
-        if len(w) > 2 and w not in STOP_WORDS
+def tokenize(text):
+    return [
+        w for w in normalize(text).split()
+        if len(w) > 1 and w not in STOP_WORDS
     ]
-    return result
 
 
-def stable_key(*parts):
-    raw = "|".join(str(p) for p in parts)
+def expand_topic(topic):
+    """Expand topic terminology to improve semantic keyword coverage."""
+    base = normalize(topic)
+    expanded = [base]
+
+    for key, alternatives in SYNONYMS.items():
+        if re.search(r"\b" + re.escape(key) + r"\w*\b", base):
+            expanded.extend(alternatives)
+
+        for alternative in alternatives:
+            alt = normalize(alternative)
+            if alt and re.search(
+                r"\b" + re.escape(alt) + r"\b", base
+            ):
+                expanded.append(key)
+
+    return list(dict.fromkeys(expanded))
+
+
+def stable_id(*parts):
+    raw = "|".join(map(str, parts))
     return hashlib.sha256(raw.encode()).hexdigest()[:18]
 
 
 # =========================================================
-# PDF EXTRACTION WITH OPTIONAL OCR
+# PDF TEXT EXTRACTION
 # =========================================================
 
 def extract_pdf(pdf_bytes):
-    text_parts = []
+    pieces = []
 
     try:
         reader = PdfReader(BytesIO(pdf_bytes))
         for page in reader.pages:
-            text = page.extract_text() or ""
-            if text.strip():
-                text_parts.append(text)
+            page_text = page.extract_text() or ""
+            if page_text.strip():
+                pieces.append(page_text)
     except Exception:
         pass
 
-    text = "\n".join(text_parts)
+    text = "\n".join(pieces)
 
-    if len(text.strip()) >= 60:
-        return text, "Selectable PDF text"
+    if len(text.strip()) >= 40:
+        return text, "Selectable text"
 
-    # Optional OCR fallback. This needs system packages too.
+    # Optional OCR fallback, if system packages are installed.
     try:
         from pdf2image import convert_from_bytes
         import pytesseract
 
-        images = convert_from_bytes(pdf_bytes, dpi=180)
-        ocr_parts = []
-
-        for image in images:
-            ocr_parts.append(
-                pytesseract.image_to_string(image, config="--psm 6")
-            )
-
-        ocr_text = "\n".join(ocr_parts)
+        pages = convert_from_bytes(pdf_bytes, dpi=200)
+        ocr_text = "\n".join(
+            pytesseract.image_to_string(page)
+            for page in pages
+        )
 
         if ocr_text.strip():
             return ocr_text, "OCR"
@@ -164,154 +192,307 @@ def extract_pdf(pdf_bytes):
     except Exception:
         pass
 
-    return text, "Text extraction only; OCR unavailable or unsuccessful"
+    return text, "OCR unavailable or no readable text"
 
 
 # =========================================================
 # QUESTION EXTRACTION
 # =========================================================
 
-def clean_header_lines(text):
-    patterns = [
-        r"^\s*time\s*(allowed)?\s*[:\-]?",
-        r"^\s*maximum marks",
-        r"^\s*max\.?\s*marks",
-        r"^\s*instructions?\s*[:\-]?",
-        r"^\s*attempt\s+(any|all)",
-        r"^\s*duration\s*[:\-]?",
-        r"^\s*roll\s*no",
-        r"^\s*enrollment",
-        r"^\s*university",
-        r"^\s*department",
-        r"^\s*semester\s*[:\-]?",
-        r"^\s*branch\s*[:\-]?",
-        r"^\s*subject\s*[:\-]?",
-        r"^\s*end semester",
-        r"^\s*mid semester"
-    ]
+def extract_questions(text):
+    # Remove common paper instructions and metadata.
+    lines = []
 
-    output = []
     for line in text.replace("\r", "\n").split("\n"):
         line = line.strip()
         if not line:
             continue
-        if any(re.search(p, line, re.I) for p in patterns):
+
+        if re.match(
+            r"(?i)^(time allowed|maximum marks|max\.?\s*marks|"
+            r"attempt any|attempt all|instructions|duration|"
+            r"roll no|enrollment no|semester|subject\s*:|"
+            r"university|department)\b",
+            line
+        ):
             continue
-        output.append(line)
 
-    return "\n".join(output)
+        lines.append(line)
 
+    text = "\n".join(lines)
 
-def extract_questions(text):
-    text = clean_header_lines(text)
-
-    # Recognizes formats such as:
-    # 1. ...  2. ...
-    # Q.1 ... Q2 ...
-    # Question 1 ...
+    # Recognize Q1, Q.1, Question 1, 1. and 1)
     pattern = re.compile(
-        r"(?m)^\s*(?:Q(?:uestion)?\s*\.?\s*)?"
-        r"(\d{1,2})\s*[\.\):\-]\s+"
+        r"(?im)^\s*(?:question\s*|q\s*\.?\s*)?"
+        r"(\d{1,2})\s*[\.\):]\s+"
     )
 
     matches = list(pattern.finditer(text))
-    questions = []
+    result = []
 
     for i, match in enumerate(matches):
         start = match.end()
-        end = matches[i + 1].start() if i + 1 < len(matches) else len(text)
+        end = (
+            matches[i + 1].start()
+            if i + 1 < len(matches)
+            else len(text)
+        )
 
-        q = re.sub(r"\s+", " ", text[start:end]).strip()
+        question = re.sub(
+            r"\s+", " ", text[start:end]
+        ).strip()
 
-        if len(q) < 20:
+        # Exclude empty entries and page headers.
+        if len(question) < 18:
             continue
 
-        if re.fullmatch(r"[\W\d]+", q):
+        # Exclude instruction-like text.
+        if re.match(
+            r"(?i)^(attempt any|answer all|time allowed|"
+            r"maximum marks|instructions)\b",
+            question
+        ):
             continue
 
-        questions.append({
+        result.append({
             "number": match.group(1),
-            "text": q
+            "text": question
         })
 
-    # Fallback for papers without clear numbering.
-    if not questions:
+    # Fallback for papers without recognized numbering.
+    if not result:
         paragraphs = re.split(r"\n+", text)
-        for i, p in enumerate(paragraphs, start=1):
-            p = re.sub(r"\s+", " ", p).strip()
-            if len(p) >= 35:
-                questions.append({
+        for i, paragraph in enumerate(paragraphs, 1):
+            paragraph = paragraph.strip()
+            if len(paragraph) >= 35:
+                result.append({
                     "number": str(i),
-                    "text": p
+                    "text": paragraph
                 })
 
-    return questions
+    return result
 
 
 # =========================================================
-# QUESTION TYPE, DIFFICULTY AND MARKS ESTIMATION
+# IMPROVED QUESTION-TO-TOPIC MAPPING
+# =========================================================
+
+def keyword_match_score(question, topic):
+    """
+    Measures overlap between question concepts and syllabus concepts.
+    Uses topic aliases and partial word matches.
+    """
+    q = normalize(question)
+    q_tokens = set(tokenize(q))
+
+    topic_variants = expand_topic(topic)
+    best = 0.0
+
+    for variant in topic_variants:
+        t_tokens = set(tokenize(variant))
+
+        if not t_tokens:
+            continue
+
+        # Full topic phrase is strong evidence.
+        phrase_score = 1.0 if variant in q else 0.0
+
+        # How much of the topic's vocabulary appears in the question?
+        coverage = len(q_tokens & t_tokens) / len(t_tokens)
+
+        # Partial matches for plural or word-ending variations.
+        partial_matches = 0
+        for term in t_tokens:
+            if any(
+                qword.startswith(term) or term.startswith(qword)
+                for qword in q_tokens
+                if min(len(qword), len(term)) >= 4
+            ):
+                partial_matches += 1
+
+        partial_coverage = partial_matches / len(t_tokens)
+
+        score = max(
+            phrase_score,
+            0.75 * coverage + 0.25 * partial_coverage
+        )
+
+        best = max(best, score)
+
+    return best
+
+
+def match_topics(questions, topics):
+    if not questions or not topics:
+        return []
+
+    topic_variants = [
+        " ".join(expand_topic(topic))
+        for topic in topics
+    ]
+
+    questions_text = [q["text"] for q in questions]
+
+    # Character n-grams help with spelling differences and word forms.
+    # Word n-grams help with meaningful phrases.
+    try:
+        word_vectorizer = TfidfVectorizer(
+            analyzer="word",
+            ngram_range=(1, 2),
+            sublinear_tf=True,
+            strip_accents="unicode"
+        )
+
+        combined_text = topic_variants + questions_text
+        word_matrix = word_vectorizer.fit_transform(combined_text)
+
+        topic_word_matrix = word_matrix[:len(topics)]
+        question_word_matrix = word_matrix[len(topics):]
+
+        word_similarity = cosine_similarity(
+            question_word_matrix, topic_word_matrix
+        )
+
+    except ValueError:
+        word_similarity = [
+            [0.0] * len(topics) for _ in questions
+        ]
+
+    try:
+        char_vectorizer = TfidfVectorizer(
+            analyzer="char_wb",
+            ngram_range=(3, 5),
+            sublinear_tf=True
+        )
+
+        char_matrix = char_vectorizer.fit_transform(
+            topic_variants + questions_text
+        )
+
+        char_similarity = cosine_similarity(
+            char_matrix[len(topics):],
+            char_matrix[:len(topics)]
+        )
+
+    except ValueError:
+        char_similarity = [
+            [0.0] * len(topics) for _ in questions
+        ]
+
+    output = []
+
+    for i, question in enumerate(questions):
+        scores = []
+
+        for j, topic in enumerate(topics):
+            lexical = keyword_match_score(
+                question["text"], topic
+            )
+            word_score = float(word_similarity[i][j])
+            char_score = float(char_similarity[i][j])
+
+            # Lexical coverage receives greater weight because a
+            # question often describes a topic without naming it.
+            score = (
+                0.55 * lexical
+                + 0.30 * word_score
+                + 0.15 * char_score
+            )
+
+            scores.append(score)
+
+        order = sorted(
+            range(len(scores)),
+            key=lambda j: scores[j],
+            reverse=True
+        )
+
+        best_index = order[0]
+        best_score = scores[best_index]
+        second_score = (
+            scores[order[1]] if len(order) > 1 else 0
+        )
+
+        # A match can be shown even if it is uncertain.
+        # The review flag communicates uncertainty honestly.
+        matched_topic = topics[best_index]
+
+        if best_score >= 0.38:
+            match_status = "Strong match"
+        elif best_score >= 0.22:
+            match_status = "Review suggested"
+        else:
+            match_status = "Low confidence — verify"
+
+        output.append({
+            "Question No.": question["number"],
+            "Question": question["text"],
+            "Matched Topic": matched_topic,
+            "Confidence %": round(best_score * 100, 1),
+            "Match Status": match_status,
+            "Score Gap %": round(
+                max(0, best_score - second_score) * 100, 1
+            ),
+            "Question Type": classify_type(question["text"]),
+            "Difficulty (estimated)": estimate_difficulty(
+                question["text"]
+            ),
+            "Marks (if detected)": extract_marks(question["text"])
+        })
+
+    return output
+
+
+# =========================================================
+# QUESTION CLASSIFICATION
 # =========================================================
 
 def classify_type(question):
     q = normalize(question)
 
-    derivation_words = [
-        "derive", "derivation", "prove that", "proof of",
+    if any(x in q for x in [
+        "derive", "prove that", "proof of",
         "deduce", "show that"
-    ]
-
-    numerical_words = [
-        "calculate", "compute", "determine the value",
-        "find the current", "find the voltage", "evaluate",
-        "solve for", "numerical", "resistance", "velocity",
-        "temperature", "pressure", "concentration"
-    ]
-
-    theory_words = [
-        "explain", "describe", "discuss", "define",
-        "differentiate between", "compare", "write a note",
-        "state the", "list the"
-    ]
-
-    if any(x in q for x in derivation_words):
+    ]):
         return "Derivation"
 
-    if any(x in q for x in numerical_words):
+    if any(x in q for x in [
+        "calculate", "compute", "find the value",
+        "evaluate", "numerical", "determine the current",
+        "find the voltage", "solve for"
+    ]):
         return "Numerical"
 
-    if any(x in q for x in theory_words):
+    if any(x in q for x in [
+        "explain", "describe", "discuss", "define",
+        "differentiate between", "compare",
+        "write a note", "state the"
+    ]):
         return "Theory"
-
-    if re.search(r"\d+\s*(?:ohm|volt|ampere|kg|mol|°c)", q):
-        return "Numerical"
 
     return "Other / Mixed"
 
 
 def estimate_difficulty(question):
     q = normalize(question)
-    score = 0
-
-    medium_words = [
-        "explain", "compare", "differentiate", "calculate",
-        "derive", "prove", "evaluate", "determine"
-    ]
 
     hard_words = [
         "hence prove", "derive and prove",
-        "using the above result", "optimize",
-        "multi-step", "discuss in detail"
+        "multi-step", "optimize", "discuss in detail"
+    ]
+    medium_words = [
+        "derive", "calculate", "compare", "differentiate",
+        "evaluate", "determine", "explain"
     ]
 
-    score += sum(1 for w in medium_words if w in q)
-    score += 2 * sum(1 for w in hard_words if w in q)
+    score = (
+        2 * sum(w in q for w in hard_words)
+        + sum(w in q for w in medium_words)
+    )
 
     if len(q) > 220:
         score += 2
     elif len(q) > 100:
-        score += 1
-
-    if re.search(r"\([a-d]\)", q) or re.search(r"\([ivx]+\)", q):
         score += 1
 
     if score >= 4:
@@ -322,7 +503,6 @@ def estimate_difficulty(question):
 
 
 def extract_marks(question):
-    # Only accepts marks explicitly attached to the question.
     patterns = [
         r"\[\s*(\d{1,2})\s*marks?\s*\]",
         r"\(\s*(\d{1,2})\s*marks?\s*\)",
@@ -331,148 +511,60 @@ def extract_marks(question):
     ]
 
     for pattern in patterns:
-        match = re.search(pattern, question, re.I)
-        if match:
-            value = int(match.group(1))
-            if 1 <= value <= 30:
-                return value
+        m = re.search(pattern, question, re.I)
+        if m:
+            marks = int(m.group(1))
+            if 1 <= marks <= 30:
+                return marks
 
     return None
 
 
 def extract_year(filename):
-    match = re.search(r"\b(20\d{2}|19\d{2})\b", filename)
-    return int(match.group(1)) if match else None
+    m = re.search(r"\b(19\d{2}|20\d{2})\b", filename)
+    return int(m.group(1)) if m else None
 
 
 # =========================================================
-# SYLLABUS TOPIC MATCHING
+# ANALYSIS
 # =========================================================
 
-def match_topics(questions, topics):
-    if not questions or not topics:
-        return []
-
-    question_texts = [q["text"] for q in questions]
-
-    # TF-IDF works without a paid API or network access.
-    try:
-        vectorizer = TfidfVectorizer(
-            ngram_range=(1, 2),
-            stop_words="english",
-            sublinear_tf=True
-        )
-
-        all_texts = topics + question_texts
-        matrix = vectorizer.fit_transform(all_texts)
-
-        topic_matrix = matrix[:len(topics)]
-        question_matrix = matrix[len(topics):]
-
-        similarities = cosine_similarity(
-            question_matrix,
-            topic_matrix
-        )
-
-    except ValueError:
-        similarities = [[0] * len(topics) for _ in questions]
-
-    results = []
-
-    for i, question in enumerate(questions):
-        qtext = normalize(question["text"])
-        scores = []
-
-        for j, topic in enumerate(topics):
-            ttext = normalize(topic)
-
-            if ttext and ttext in qtext:
-                score = 1.0
-            else:
-                tfidf_score = float(similarities[i][j])
-
-                qwords = set(words(qtext))
-                twords = set(words(ttext))
-                overlap = (
-                    len(qwords & twords) / len(twords)
-                    if twords else 0
-                )
-
-                fuzzy = SequenceMatcher(
-                    None, qtext, ttext
-                ).ratio()
-
-                score = (
-                    0.65 * tfidf_score
-                    + 0.25 * overlap
-                    + 0.10 * fuzzy
-                )
-
-            scores.append(score)
-
-        best_index = max(range(len(scores)), key=lambda x: scores[x])
-        best_score = scores[best_index]
-
-        # Conservative threshold prevents forcing unrelated matches.
-        if best_score < 0.10:
-            matched_topic = "Unclassified"
-        else:
-            matched_topic = topics[best_index]
-
-        confidence = round(min(best_score, 1.0) * 100, 1)
-
-        results.append({
-            "Question No.": question["number"],
-            "Question": question["text"],
-            "Matched Topic": matched_topic,
-            "Confidence %": confidence,
-            "Question Type": classify_type(question["text"]),
-            "Difficulty (estimated)": estimate_difficulty(question["text"]),
-            "Marks (if detected)": extract_marks(question["text"])
-        })
-
-    return results
-
-
-# =========================================================
-# TOPIC ANALYSIS
-# =========================================================
-
-def analyze_subject(subject, paper_files):
+def analyze_subject(subject, files):
     topics = [
-        t.strip()
-        for t in subject["topics"].splitlines()
-        if t.strip()
+        x.strip() for x in subject["topics"].splitlines()
+        if x.strip()
     ]
 
     all_rows = []
     notices = []
-    paper_years = {}
 
-    for paper in paper_files:
-        text, method = extract_pdf(paper.getvalue())
+    for pdf in files:
+        text, method = extract_pdf(pdf.getvalue())
 
         if not text.strip():
-            notices.append(f"{paper.name}: no readable text found.")
+            notices.append(
+                f"{pdf.name}: no readable text was extracted."
+            )
             continue
 
         questions = extract_questions(text)
 
         if not questions:
-            notices.append(f"{paper.name}: no questions were detected.")
+            notices.append(
+                f"{pdf.name}: no question boundaries were detected."
+            )
             continue
 
         rows = match_topics(questions, topics)
-        year = extract_year(paper.name)
+        year = extract_year(pdf.name)
 
         for row in rows:
-            row["Paper"] = paper.name
+            row["Paper"] = pdf.name
             row["Year"] = year
             all_rows.append(row)
 
-        paper_years[paper.name] = year
         notices.append(
-            f"{paper.name}: {len(rows)} questions detected using {method}."
+            f"{pdf.name}: {len(rows)} questions detected ({method})."
         )
 
     result = pd.DataFrame(all_rows)
@@ -480,34 +572,25 @@ def analyze_subject(subject, paper_files):
     if result.empty:
         return result, pd.DataFrame(), notices
 
-    topic_rows = []
+    summary = []
 
     for topic in topics:
         subset = result[result["Matched Topic"] == topic]
 
-        count = len(subset)
-        papers_count = subset["Paper"].nunique()
-
-        detected_marks = subset["Marks (if detected)"].dropna()
-        marks_total = (
-            int(detected_marks.sum())
-            if not detected_marks.empty else None
-        )
-
-        topic_rows.append({
+        summary.append({
             "Topic": topic,
-            "Questions": count,
-            "Papers Appearing": papers_count,
+            "Questions": len(subset),
+            "Papers Appearing": subset["Paper"].nunique(),
             "Theory": int((subset["Question Type"] == "Theory").sum()),
             "Numerical": int((subset["Question Type"] == "Numerical").sum()),
             "Derivation": int((subset["Question Type"] == "Derivation").sum()),
             "Easy": int((subset["Difficulty (estimated)"] == "Easy").sum()),
             "Medium": int((subset["Difficulty (estimated)"] == "Medium").sum()),
             "Hard": int((subset["Difficulty (estimated)"] == "Hard").sum()),
-            "Marks Detected": marks_total
+            "Marks Detected": subset["Marks (if detected)"].sum(min_count=1)
         })
 
-    topic_df = pd.DataFrame(topic_rows)
+    topic_df = pd.DataFrame(summary)
 
     total_questions = max(len(result), 1)
     total_papers = max(result["Paper"].nunique(), 1)
@@ -520,17 +603,15 @@ def analyze_subject(subject, paper_files):
         topic_df["Papers Appearing"] / total_papers * 100
     ).round(1)
 
-    # Marks weightage is shown only when marks were detected.
-    total_detected_marks = topic_df["Marks Detected"].sum(min_count=1)
+    total_marks = topic_df["Marks Detected"].sum(min_count=1)
 
-    if pd.notna(total_detected_marks) and total_detected_marks > 0:
+    if pd.notna(total_marks) and total_marks > 0:
         topic_df["Detected Marks %"] = (
-            topic_df["Marks Detected"] / total_detected_marks * 100
+            topic_df["Marks Detected"] / total_marks * 100
         ).round(1)
     else:
         topic_df["Detected Marks %"] = None
 
-    # Explainable heuristic score; not a prediction of exam questions.
     topic_df["Priority Score"] = (
         0.60 * topic_df["Frequency %"]
         + 0.40 * topic_df["Paper Coverage %"]
@@ -538,8 +619,8 @@ def analyze_subject(subject, paper_files):
 
     def priority(row):
         if row["Questions"] == 0:
-            return "Insufficient evidence"
-        if row["Priority Score"] >= 45:
+            return "No mapped questions"
+        if row["Priority Score"] >= 40:
             return "High"
         if row["Priority Score"] >= 20:
             return "Medium"
@@ -547,30 +628,28 @@ def analyze_subject(subject, paper_files):
 
     topic_df["Priority"] = topic_df.apply(priority, axis=1)
 
-    def reason(row):
-        if row["Questions"] == 0:
-            return "No question was confidently mapped to this topic."
-        return (
-            f"{int(row['Questions'])} mapped question(s) across "
-            f"{int(row['Papers Appearing'])} paper(s); "
-            f"frequency {row['Frequency %']}%."
-        )
-
-    topic_df["Reason"] = topic_df.apply(reason, axis=1)
+    topic_df["Reason"] = topic_df.apply(
+        lambda r: (
+            "No question mapped to this topic."
+            if r["Questions"] == 0
+            else (
+                f"{int(r['Questions'])} question(s) across "
+                f"{int(r['Papers Appearing'])} paper(s)."
+            )
+        ),
+        axis=1
+    )
 
     topic_df = topic_df.sort_values(
         ["Priority Score", "Questions"],
         ascending=False
     ).reset_index(drop=True)
 
-    # Trend table only where paper filenames contain years.
-    result["Year"] = pd.to_numeric(result["Year"], errors="coerce")
-
     return result, topic_df, notices
 
 
 # =========================================================
-# TIMETABLE GENERATOR
+# STUDY PLAN INCLUDING REVISION
 # =========================================================
 
 def build_timetable(analysis, daily_hours):
@@ -579,147 +658,208 @@ def build_timetable(analysis, daily_hours):
 
     for subject in analysis:
         exam_date = subject["exam_date"]
+        topics = subject["topics"]
 
-        if exam_date < today:
+        # Do not create new study tasks after the exam.
+        if exam_date <= today:
             continue
 
-        for _, row in subject["topics"].iterrows():
-            if row["Questions"] <= 0:
-                continue
+        active_topics = topics[topics["Questions"] > 0]
 
+        for _, row in active_topics.iterrows():
             priority = row["Priority"]
-            minutes = 90 if priority == "High" else 60 if priority == "Medium" else 40
+
+            minutes = (
+                75 if priority == "High"
+                else 50 if priority == "Medium"
+                else 35
+            )
 
             tasks.append({
                 "Subject": subject["name"],
                 "Topic": row["Topic"],
                 "Priority": priority,
-                "Score": float(row["Priority Score"]),
                 "Minutes": minutes,
-                "Exam Date": exam_date
+                "Exam Date": exam_date,
+                "Score": float(row["Priority Score"]),
+                "Kind": "Study"
             })
+
+        # Add revision and practice for the day before the exam.
+        tasks.append({
+            "Subject": subject["name"],
+            "Topic": "Revise important formulas and concepts",
+            "Priority": "Revision",
+            "Minutes": 45,
+            "Exam Date": exam_date,
+            "Score": 100,
+            "Kind": "Revision"
+        })
+
+        tasks.append({
+            "Subject": subject["name"],
+            "Topic": "Solve selected PYQs and review mistakes",
+            "Priority": "Revision",
+            "Minutes": 45,
+            "Exam Date": exam_date,
+            "Score": 95,
+            "Kind": "Revision"
+        })
 
     if not tasks:
         return pd.DataFrame()
 
-    # Schedule nearer exams first, then higher-priority topics.
-    tasks.sort(key=lambda t: (t["Exam Date"], -t["Score"]))
+    # Earlier exams are handled first; high-priority topics first.
+    tasks.sort(
+        key=lambda x: (x["Exam Date"], -x["Score"])
+    )
 
-    plan = []
-    remaining = tasks.copy()
-    max_minutes = daily_hours * 60
-    last_exam = max(t["Exam Date"] for t in tasks)
+    # Each task must finish before its subject's exam.
+    # Revision tasks are reserved for the day before the exam.
+    revision_tasks = [
+        t for t in tasks if t["Kind"] == "Revision"
+    ]
+    study_tasks = [
+        t for t in tasks if t["Kind"] == "Study"
+    ]
 
-    day = today
+    schedule = []
+    capacity = daily_hours * 60
 
-    while day <= last_exam and remaining:
-        available = max_minutes
-        candidates = sorted(
-            [t for t in remaining if t["Exam Date"] >= day],
-            key=lambda t: (
-                t["Exam Date"],
-                -t["Score"]
-            )
+    # Reserve revision for the final day before each exam.
+    for task in revision_tasks:
+        revision_day = task["Exam Date"] - timedelta(days=1)
+
+        schedule.append({
+            **task,
+            "Date": revision_day
+        })
+
+    # Allocate topic study sessions across the days before the exam.
+    for task in study_tasks:
+        exam_date = task["Exam Date"]
+        deadline = exam_date - timedelta(days=2)
+
+        available_days = max(
+            (deadline - today).days + 1, 1
         )
 
-        selected = []
+        # Distribute study tasks over the available dates.
+        placed = False
 
-        for task in candidates:
-            if task["Minutes"] <= available:
-                selected.append(task)
-                available -= task["Minutes"]
+        for offset in range(available_days):
+            study_day = today + timedelta(days=offset)
 
-            if available < 30:
+            day_minutes = sum(
+                x["Minutes"] for x in schedule
+                if x["Date"] == study_day
+            )
+
+            if (
+                study_day < exam_date
+                and day_minutes + task["Minutes"] <= capacity
+            ):
+                schedule.append({
+                    **task,
+                    "Date": study_day
+                })
+                placed = True
                 break
 
-        for task in selected:
-            plan.append({
-                "Date": day,
-                "Subject": task["Subject"],
-                "Topic": task["Topic"],
-                "Priority": task["Priority"],
-                "Minutes": task["Minutes"],
-                "Exam Date": task["Exam Date"]
-            })
-            remaining.remove(task)
+        if not placed:
+            # If overloaded, use the latest available pre-exam day.
+            last_day = exam_date - timedelta(days=2)
 
-        day += timedelta(days=1)
+            if last_day >= today:
+                schedule.append({
+                    **task,
+                    "Date": last_day
+                })
 
-    df = pd.DataFrame(plan)
+    df = pd.DataFrame(schedule)
 
-    if not df.empty:
-        df["Task ID"] = df.apply(
-            lambda r: stable_key(
-                r["Date"], r["Subject"], r["Topic"]
-            ),
-            axis=1
-        )
+    if df.empty:
+        return df
 
-    return df
+    df["Task ID"] = df.apply(
+        lambda r: stable_id(
+            r["Date"], r["Subject"], r["Topic"], r["Kind"]
+        ),
+        axis=1
+    )
+
+    return df.sort_values(
+        ["Date", "Exam Date", "Kind", "Subject"]
+    ).reset_index(drop=True)
 
 
 # =========================================================
-# HEADER AND SIDEBAR
+# HEADER
 # =========================================================
 
 st.markdown("""
 <div class="hero">
-    <h1>🎓 Exam Intelligence Assistant</h1>
-    <p>Understand your PYQs. Prioritize your syllabus. Track every study session.</p>
+<h1>🎓 Exam Intelligence Assistant</h1>
+<p>Smarter question mapping · Topic priorities · A complete revision plan</p>
 </div>
 """, unsafe_allow_html=True)
 
 with st.sidebar:
-    st.title("⚙️ Study Settings")
+    st.header("Study Settings")
     daily_hours = st.slider(
         "Available study hours per day",
-        min_value=1,
-        max_value=12,
-        value=4
+        1, 12, 4
+    )
+    st.caption("Free analysis. No paid AI API required.")
+
+
+# =========================================================
+# AUTOMATIC DASHBOARD NAVIGATION
+# =========================================================
+
+dashboard_names = [
+    "Subjects & Setup",
+    "Exam Intelligence",
+    "Study Planner"
+]
+
+if st.session_state.active_dashboard not in dashboard_names:
+    st.session_state.active_dashboard = dashboard_names[0]
+
+active_dashboard = st.radio(
+    "Navigate dashboard",
+    dashboard_names,
+    horizontal=True,
+    key="active_dashboard",
+    label_visibility="collapsed"
+)
+
+
+# =========================================================
+# DASHBOARD 1: SUBJECTS & SETUP
+# =========================================================
+
+if active_dashboard == "Subjects & Setup":
+    st.header("📚 Subjects and Question Papers")
+    st.write(
+        "Create each subject separately. Enter one syllabus topic per line "
+        "and upload all relevant previous-year papers."
     )
 
-    st.caption("Analysis runs locally using free text-processing tools.")
-    st.divider()
-    st.markdown("**Your workflow**")
-    st.write("1. Add subjects and papers")
-    st.write("2. Analyze questions")
-    st.write("3. Follow and check off the timetable")
-
-
-# =========================================================
-# DASHBOARD NAVIGATION
-# =========================================================
-
-setup_tab, analysis_tab, planner_tab = st.tabs([
-    "📚 1. Subjects & Setup",
-    "📊 2. Exam Intelligence",
-    "📅 3. Study Planner"
-])
-
-
-# =========================================================
-# DASHBOARD 1: SUBJECT SETUP
-# =========================================================
-
-with setup_tab:
-    st.header("Your Subjects")
-    st.write("Each subject has its own syllabus, exam date and previous-year papers.")
-
-    if st.button("➕ Add Subject", type="primary", key="add_subject"):
-        new_id = st.session_state.next_id
+    if st.button("➕ Add Subject", type="primary"):
+        sid = st.session_state.next_id
         st.session_state.next_id += 1
 
         st.session_state.subjects.append({
-            "id": new_id,
+            "id": sid,
             "name": "",
             "exam_date": date.today() + timedelta(days=7),
             "topics": ""
         })
-
         st.rerun()
 
     if not st.session_state.subjects:
-        st.info("Click Add Subject to create your first subject.")
+        st.info("Start by clicking Add Subject.")
 
     for index, subject in enumerate(st.session_state.subjects):
         sid = subject["id"]
@@ -733,236 +873,245 @@ with setup_tab:
                 name = st.text_input(
                     "Subject name",
                     value=subject["name"],
-                    key=f"subject_name_{sid}",
-                    placeholder="e.g. Applied Mathematics"
+                    key=f"name_{sid}"
                 )
 
             with c2:
                 exam_date = st.date_input(
                     "Exam date",
                     value=subject["exam_date"],
-                    key=f"subject_date_{sid}"
+                    key=f"date_{sid}"
                 )
 
             topics = st.text_area(
-                "Syllabus topics — one topic per line",
+                "Syllabus topics (one per line)",
                 value=subject["topics"],
-                key=f"subject_topics_{sid}",
                 height=130,
-                placeholder="Taylor and Maclaurin theorems\nBeta and Gamma functions\nTracing of curves"
+                key=f"topics_{sid}"
             )
 
             files = st.file_uploader(
-                "Upload previous-year question papers (PDF)",
+                "Upload previous-year papers (PDF)",
                 type=["pdf"],
                 accept_multiple_files=True,
-                key=f"subject_papers_{sid}"
+                key=f"files_{sid}"
             )
 
             if files:
-                st.caption("Uploaded papers:")
-                for f in files:
-                    st.write(f"📄 {f.name} · {f.size / 1024:.0f} KB")
+                st.caption("Selected papers:")
+                for file in files:
+                    st.write(f"📄 {file.name}")
 
-            b1, b2 = st.columns(2)
+            c3, c4 = st.columns(2)
 
-            with b1:
-                if st.button("💾 Save Subject", key=f"save_subject_{sid}"):
-                    if not name.strip():
-                        st.error("Enter a subject name.")
-                    elif not topics.strip():
-                        st.error("Enter at least one syllabus topic.")
+            with c3:
+                if st.button("Save Subject", key=f"save_{sid}"):
+                    if not name.strip() or not topics.strip():
+                        st.error("Enter a subject name and syllabus.")
                     else:
                         duplicate = any(
-                            other["id"] != sid
-                            and other["name"].strip().lower() == name.strip().lower()
-                            for other in st.session_state.subjects
+                            s["id"] != sid
+                            and s["name"].strip().lower() == name.strip().lower()
+                            for s in st.session_state.subjects
                         )
 
                         if duplicate:
-                            st.error("Another subject already has this name.")
+                            st.error("This subject name already exists.")
                         else:
                             subject["name"] = name.strip()
                             subject["exam_date"] = exam_date
                             subject["topics"] = topics
-                            st.success("Subject details saved.")
+                            st.success("Subject saved.")
 
-            with b2:
-                if st.button("🗑️ Remove Subject", key=f"remove_subject_{sid}"):
+            with c4:
+                if st.button("Remove Subject", key=f"remove_{sid}"):
                     st.session_state.subjects = [
-                        s for s in st.session_state.subjects if s["id"] != sid
+                        s for s in st.session_state.subjects
+                        if s["id"] != sid
                     ]
                     st.session_state.analysis = []
-                    st.session_state.analysis_signature = None
+                    st.session_state.completed_tasks = set()
                     st.rerun()
 
     st.divider()
 
-    if st.button("🚀 Analyze All Subjects", type="primary", use_container_width=True):
-        all_analysis = []
+    if st.button(
+        "🚀 Analyze All Subjects",
+        type="primary",
+        use_container_width=True
+    ):
+        analyses = []
         errors = []
 
         for subject in st.session_state.subjects:
             sid = subject["id"]
 
-            # Read current widget values, even if Save Subject wasn't clicked.
-            name = st.session_state.get(f"subject_name_{sid}", subject["name"]).strip()
-            exam_date = st.session_state.get(f"subject_date_{sid}", subject["exam_date"])
-            topics = st.session_state.get(f"subject_topics_{sid}", subject["topics"])
-            files = st.session_state.get(f"subject_papers_{sid}", [])
+            name = st.session_state.get(
+                f"name_{sid}", subject["name"]
+            ).strip()
+
+            exam_date = st.session_state.get(
+                f"date_{sid}", subject["exam_date"]
+            )
+
+            topics = st.session_state.get(
+                f"topics_{sid}", subject["topics"]
+            )
+
+            files = st.session_state.get(
+                f"files_{sid}", []
+            )
 
             if not name or not topics.strip() or not files:
                 errors.append(
-                    f"{name or 'Subject ' + str(sid)}: provide a name, syllabus and at least one PDF."
+                    f"{name or 'Subject ' + str(sid)}: missing name, topics, or PDF."
                 )
                 continue
 
-            current_subject = {
-                "id": sid,
-                "name": name,
-                "exam_date": exam_date,
-                "topics": topics
-            }
-
-            with st.spinner(f"Analyzing {name}..."):
-                result, topic_df, notices = analyze_subject(current_subject, files)
-
-            for notice in notices:
-                st.write(notice)
-
-            if result.empty:
-                errors.append(f"{name}: no questions could be extracted.")
-                continue
-
-            all_analysis.append({
-                "id": sid,
-                "name": name,
-                "exam_date": exam_date,
-                "questions": result,
-                "topics": topic_df,
-                "notices": notices
-            })
-
-            # Update saved subject details.
             subject["name"] = name
             subject["exam_date"] = exam_date
             subject["topics"] = topics
 
-        if errors:
-            for error in errors:
-                st.warning(error)
+            with st.spinner(f"Analyzing {name}..."):
+                question_df, topic_df, notices = analyze_subject(
+                    subject, files
+                )
 
-        if all_analysis:
-            st.session_state.analysis = all_analysis
-            st.session_state.analysis_signature = stable_key(
-                date.today(),
-                *[
-                    f"{s['id']}:{s['name']}:{s['exam_date']}:{s['topics']}"
-                    for s in all_analysis
-                ]
-            )
-            st.success("Analysis completed. Open Dashboard 2 to review the results.")
+            for notice in notices:
+                st.write(notice)
+
+            if question_df.empty:
+                errors.append(
+                    f"{name}: no readable questions were extracted."
+                )
+                continue
+
+            analyses.append({
+                "id": sid,
+                "name": name,
+                "exam_date": exam_date,
+                "questions": question_df,
+                "topics": topic_df
+            })
+
+        for error in errors:
+            st.warning(error)
+
+        if analyses:
+            st.session_state.analysis = analyses
+
+            # Automatically switch to the analysis dashboard.
+            st.session_state.active_dashboard = "Exam Intelligence"
+            st.rerun()
 
 
 # =========================================================
 # DASHBOARD 2: EXAM INTELLIGENCE
 # =========================================================
 
-with analysis_tab:
-    st.header("Exam Intelligence Dashboard")
+elif active_dashboard == "Exam Intelligence":
+    st.header("📊 Exam Intelligence")
 
-    analysis = st.session_state.analysis
+    analyses = st.session_state.analysis
 
-    if not analysis:
-        st.info("Add subjects and click Analyze All Subjects in Dashboard 1.")
+    if not analyses:
+        st.info("Add your subjects and analyze them first.")
     else:
-        total_questions = sum(len(s["questions"]) for s in analysis)
-        total_topics = sum(len(s["topics"]) for s in analysis)
-        high_count = sum(
+        total_questions = sum(
+            len(s["questions"]) for s in analyses
+        )
+
+        high_topics = sum(
             int((s["topics"]["Priority"] == "High").sum())
-            for s in analysis
-        )
-        unmapped = sum(
-            int((s["questions"]["Matched Topic"] == "Unclassified").sum())
-            for s in analysis
+            for s in analyses
         )
 
-        c1, c2, c3, c4 = st.columns(4)
-        c1.metric("Subjects analyzed", len(analysis))
-        c2.metric("Questions extracted", total_questions)
-        c3.metric("High-priority topics", high_count)
-        c4.metric("Unclassified questions", unmapped)
-
-        st.caption(
-            "Priority is based on the uploaded papers, not a guarantee of what will appear in your exam."
+        low_confidence = sum(
+            int(
+                s["questions"]["Match Status"].isin(
+                    ["Review suggested", "Low confidence — verify"]
+                ).sum()
+            )
+            for s in analyses
         )
 
-        selected_subject = st.selectbox(
-            "Choose a subject to inspect",
-            options=list(range(len(analysis))),
-            format_func=lambda i: analysis[i]["name"]
+        a, b, c = st.columns(3)
+        a.metric("Subjects analyzed", len(analyses))
+        b.metric("Questions extracted", total_questions)
+        c.metric("Matches to review", low_confidence)
+
+        selected = st.selectbox(
+            "Select subject",
+            range(len(analyses)),
+            format_func=lambda i: analyses[i]["name"]
         )
 
-        subject = analysis[selected_subject]
+        subject = analyses[selected]
         questions = subject["questions"]
         topics = subject["topics"]
 
-        st.subheader(f"📘 {subject['name']}")
+        st.subheader(subject["name"])
 
-        a, b, c = st.columns(3)
-        a.metric("Exam date", subject["exam_date"].strftime("%d %b %Y"))
-        a.metric(
+        x, y, z = st.columns(3)
+        x.metric("Exam date", subject["exam_date"].strftime("%d %b %Y"))
+        y.metric(
             "Days remaining",
             max((subject["exam_date"] - date.today()).days, 0)
         )
-        b.metric("Question papers", questions["Paper"].nunique())
-        c.metric("Syllabus topics", len(topics))
+        z.metric("Papers analyzed", questions["Paper"].nunique())
 
-        st.subheader("🔥 Topic frequency and priority")
-
-        chart_data = topics[topics["Questions"] > 0].set_index("Topic")[
+        st.subheader("🔥 Topic Frequency")
+        chart = topics[topics["Questions"] > 0].set_index("Topic")[
             ["Questions"]
         ]
 
-        if not chart_data.empty:
-            st.bar_chart(chart_data, horizontal=True)
+        if not chart.empty:
+            st.bar_chart(chart, horizontal=True)
         else:
-            st.info("No syllabus topics have been confidently matched yet.")
+            st.warning("No topics have been matched yet.")
+
+        st.subheader("Topic Priority and Weightage")
 
         st.dataframe(
-            topics[
-                [
-                    "Topic", "Questions", "Frequency %",
-                    "Papers Appearing", "Paper Coverage %",
-                    "Theory", "Numerical", "Derivation",
-                    "Easy", "Medium", "Hard",
-                    "Marks Detected", "Detected Marks %",
-                    "Priority Score", "Priority", "Reason"
-                ]
-            ],
+            topics,
             use_container_width=True,
             hide_index=True
         )
 
-        st.subheader("🧠 Question type distribution")
+        st.subheader("Question Type Pattern")
+        st.bar_chart(questions["Question Type"].value_counts())
 
-        type_counts = questions["Question Type"].value_counts()
-        st.bar_chart(type_counts)
+        st.subheader("Difficulty Distribution")
+        st.bar_chart(
+            questions["Difficulty (estimated)"].value_counts()
+        )
 
-        st.subheader("🎚️ Estimated difficulty distribution")
+        st.subheader("Question Mapping")
 
-        difficulty_counts = questions["Difficulty (estimated)"].value_counts()
-        st.bar_chart(difficulty_counts)
+        status_filter = st.selectbox(
+            "Filter mapping results",
+            [
+                "All questions",
+                "Strong match",
+                "Review suggested",
+                "Low confidence — verify"
+            ]
+        )
 
-        st.subheader("📝 Question-to-syllabus mapping")
+        shown = questions.copy()
+
+        if status_filter != "All questions":
+            shown = shown[
+                shown["Match Status"] == status_filter
+            ]
 
         st.dataframe(
-            questions[
+            shown[
                 [
                     "Paper", "Year", "Question No.", "Question",
-                    "Matched Topic", "Confidence %",
-                    "Question Type", "Difficulty (estimated)",
-                    "Marks (if detected)"
+                    "Matched Topic", "Confidence %", "Match Status",
+                    "Score Gap %", "Question Type",
+                    "Difficulty (estimated)", "Marks (if detected)"
                 ]
             ],
             use_container_width=True,
@@ -970,147 +1119,125 @@ with analysis_tab:
         )
 
         st.download_button(
-            "📥 Download question mapping (CSV)",
+            "📥 Download mapping CSV",
             data=questions.to_csv(index=False).encode("utf-8"),
-            file_name=f"{subject['name'].replace(' ', '_')}_mapping.csv",
+            file_name="question_mapping.csv",
             mime="text/csv"
         )
 
-        st.subheader("📈 Trends across years")
+        st.caption(
+            "Confidence is a similarity score, not a probability. "
+            "Review uncertain matches before relying on topic priorities."
+        )
 
+        st.subheader("Year-wise Trends")
         year_data = questions.dropna(subset=["Year"]).copy()
 
         if not year_data.empty:
             year_data["Year"] = year_data["Year"].astype(int)
+
             trend = year_data.groupby(
                 ["Year", "Matched Topic"]
             ).size().unstack(fill_value=0)
 
             st.line_chart(trend)
-            st.caption(
-                "Years are inferred from PDF filenames. Rename files with the year, "
-                "for example Applied_Maths_2024.pdf, to enable this chart."
-            )
         else:
             st.info(
-                "Year-wise trends need the year in each PDF filename, such as Maths_2023.pdf."
+                "Include a year in each filename, e.g. Maths_2024.pdf, "
+                "to enable year-wise trends."
             )
-
-        st.subheader("🎯 Why should I study this topic?")
-
-        studied = topics[topics["Questions"] > 0]
-
-        if not studied.empty:
-            first = studied.iloc[0]
-
-            st.success(
-                f"**{first['Topic']}** has {int(first['Questions'])} mapped question(s) "
-                f"and appeared in {int(first['Papers Appearing'])} uploaded paper(s). "
-                f"Its calculated priority is **{first['Priority']}**. "
-                f"{first['Reason']}"
-            )
-
-        st.caption(
-            "Confidence is a text-similarity estimate, not a calibrated probability. "
-            "Check low-confidence matches manually."
-        )
 
 
 # =========================================================
 # DASHBOARD 3: STUDY PLANNER
 # =========================================================
 
-with planner_tab:
+elif active_dashboard == "Study Planner":
     st.header("📅 Smart Study Planner")
 
-    analysis = st.session_state.analysis
+    analyses = st.session_state.analysis
 
-    if not analysis:
-        st.info("Analyze your subjects in Dashboard 1 first.")
+    if not analyses:
+        st.info("Analyze your subjects first.")
     else:
-        today = date.today()
-
-        timetable = build_timetable(analysis, daily_hours)
+        timetable = build_timetable(analyses, daily_hours)
 
         if timetable.empty:
             st.warning(
-                "No future study tasks could be generated. Check your exam dates and topic mappings."
+                "No future study tasks found. Check the exam dates "
+                "and topic mappings."
             )
         else:
-            # Stable checklist keys preserve progress through normal reruns.
-            task_ids = list(timetable["Task ID"])
-            completed = st.session_state.completed_tasks
+            today = date.today()
+            task_ids = timetable["Task ID"].tolist()
 
-            completed_ids = [
-                task_id for task_id in task_ids if task_id in completed
-            ]
-
-            total_tasks = len(task_ids)
-            done_tasks = len(completed_ids)
-            percent = round(done_tasks / total_tasks * 100) if total_tasks else 0
-
-            days_left = min(
-                max((s["exam_date"] - today).days, 0)
-                for s in analysis
+            done = sum(
+                task_id in st.session_state.completed_tasks
+                for task_id in task_ids
             )
 
-            m1, m2, m3, m4 = st.columns(4)
-            m1.metric("Tasks planned", total_tasks)
-            m2.metric("Tasks completed", done_tasks)
-            m3.metric("Overall progress", f"{percent}%")
-            m4.metric("Nearest exam countdown", f"{days_left} days")
-
-            st.progress(percent / 100)
-
-            st.subheader("📈 Your progress")
-
-            if total_tasks:
-                progress_df = pd.DataFrame({
-                    "Status": ["Completed", "Remaining"],
-                    "Tasks": [done_tasks, total_tasks - done_tasks]
-                }).set_index("Status")
-
-                st.bar_chart(progress_df)
-
-            st.caption(
-                "Progress is calculated from the study tasks you check off below. "
-                "It is not a prediction of your exam marks."
+            progress = round(
+                done / len(task_ids) * 100
             )
 
-            st.subheader("✅ Daily checklist")
+            nearest_exam = min(
+                s["exam_date"] for s in analyses
+                if s["exam_date"] >= today
+            ) if any(
+                s["exam_date"] >= today for s in analyses
+            ) else None
 
-            plan_dates = sorted(timetable["Date"].unique())
+            days_left = (
+                max((nearest_exam - today).days, 0)
+                if nearest_exam else 0
+            )
 
-            for plan_day in plan_dates:
-                day_rows = timetable[timetable["Date"] == plan_day]
+            a, b, c = st.columns(3)
+            a.metric("Total tasks", len(task_ids))
+            b.metric("Completed tasks", done)
+            c.metric("Overall progress", f"{progress}%")
 
-                day_total = len(day_rows)
-                day_done = sum(
-                    1 for task_id in day_rows["Task ID"]
-                    if task_id in st.session_state.completed_tasks
+            st.progress(progress / 100)
+
+            st.metric("Days to nearest exam", days_left)
+
+            st.subheader("Your Daily Checklist")
+
+            for plan_day in sorted(timetable["Date"].unique()):
+                day_tasks = timetable[
+                    timetable["Date"] == plan_day
+                ]
+
+                day_ids = day_tasks["Task ID"].tolist()
+
+                completed_today = sum(
+                    task_id in st.session_state.completed_tasks
+                    for task_id in day_ids
                 )
 
                 with st.container(border=True):
                     st.markdown(
                         f"### {plan_day.strftime('%A, %d %B %Y')}"
                     )
+
                     st.caption(
-                        f"{day_done}/{day_total} tasks completed"
+                        f"{completed_today}/{len(day_ids)} tasks completed"
                     )
 
-                    for _, task in day_rows.iterrows():
+                    for _, task in day_tasks.iterrows():
                         task_id = task["Task ID"]
+
                         label = (
                             f"{task['Subject']} — {task['Topic']} "
-                            f"({task['Minutes']} min · {task['Priority']})"
+                            f"({task['Minutes']} min; {task['Kind']})"
                         )
-
-                        is_done = task_id in st.session_state.completed_tasks
 
                         checked = st.checkbox(
                             label,
-                            value=is_done,
-                            key=f"check_{task_id}"
+                            value=(
+                                task_id in st.session_state.completed_tasks
+                            ),
+                            key=f"task_{task_id}"
                         )
 
                         if checked:
@@ -1118,58 +1245,62 @@ with planner_tab:
                         else:
                             st.session_state.completed_tasks.discard(task_id)
 
-                    # Update visible day progress after checking tasks.
-                    latest_done = sum(
-                        1 for task_id in day_rows["Task ID"]
-                        if task_id in st.session_state.completed_tasks
+                    current_done = sum(
+                        task_id in st.session_state.completed_tasks
+                        for task_id in day_ids
                     )
-                    st.progress(latest_done / day_total if day_total else 0)
 
-            st.divider()
+                    st.progress(
+                        current_done / len(day_ids)
+                        if day_ids else 0
+                    )
 
-            completed_now = sum(
-                1 for task_id in task_ids
-                if task_id in st.session_state.completed_tasks
+            st.subheader("Preparation Progress")
+
+            latest_done = sum(
+                task_id in st.session_state.completed_tasks
+                for task_id in task_ids
             )
 
-            current_percent = round(
-                completed_now / total_tasks * 100
-            ) if total_tasks else 0
+            latest_percent = round(
+                latest_done / len(task_ids) * 100
+            )
 
-            st.subheader("🏁 Preparation summary")
-            st.metric("Current completion", f"{current_percent}%")
-            st.progress(current_percent / 100)
+            st.metric("Study plan completed", f"{latest_percent}%")
+            st.progress(latest_percent / 100)
 
-            if current_percent == 100:
-                st.success("All generated study tasks are complete. Review weak topics before the exam.")
-            elif current_percent >= 70:
-                st.success("Good progress. Keep going and revisit difficult questions.")
-            elif current_percent >= 35:
-                st.info("You're making progress. Complete today's remaining tasks when possible.")
+            if latest_percent == 100:
+                st.success(
+                    "All scheduled tasks are complete. "
+                    "Use your remaining time for a calm final review."
+                )
+            elif latest_percent >= 60:
+                st.success("Good progress. Keep completing your daily goals.")
             else:
-                st.info("Start with the nearest exam and the highest-priority mapped topics.")
+                st.info(
+                    "Start with the earliest exam and the highest-priority topics."
+                )
 
-            export_plan = timetable.copy()
-            export_plan["Completed"] = export_plan["Task ID"].apply(
+            export = timetable.copy()
+            export["Completed"] = export["Task ID"].apply(
                 lambda x: x in st.session_state.completed_tasks
             )
-            export_plan["Date"] = export_plan["Date"].apply(
+            export["Date"] = export["Date"].apply(
                 lambda x: x.strftime("%d %b %Y")
             )
-            export_plan["Exam Date"] = export_plan["Exam Date"].apply(
+            export["Exam Date"] = export["Exam Date"].apply(
                 lambda x: x.strftime("%d %b %Y")
             )
 
             st.download_button(
-                "📥 Download study timetable (CSV)",
-                data=export_plan.to_csv(index=False).encode("utf-8"),
-                file_name="exam_study_timetable.csv",
+                "📥 Download timetable CSV",
+                data=export.to_csv(index=False).encode("utf-8"),
+                file_name="study_timetable.csv",
                 mime="text/csv"
             )
 
 st.divider()
 st.caption(
-    "Exam Intelligence Assistant · Free local text analysis · "
-    "Always verify extracted questions and estimated priorities."
+    "Exam Intelligence Assistant | Free text analysis | "
+    "Always verify low-confidence topic matches."
 )
-
