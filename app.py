@@ -26,41 +26,36 @@ st.set_page_config(
 st.markdown("""
 <style>
 @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Manrope:wght@500;600;700;800&display=swap');
-:root { --ink:#18213b; --muted:#667085; --line:#e7eaf3; --purple:#6558d9; --blue:#4776e6; }
-.stApp { background: radial-gradient(circle at 8% 0%, #eef0ff 0, transparent 32%), linear-gradient(145deg,#f7f8fc 0%,#f9fbff 52%,#f2f5ff 100%); color:var(--ink); font-family:'DM Sans',sans-serif; }
-.block-container { padding-top:1.35rem; padding-bottom:3rem; max-width:1500px; }
-h1,h2,h3,h4 { font-family:'Manrope','DM Sans',sans-serif !important; letter-spacing:-.035em; color:#18213b; }
-h2 { margin-top:.25rem !important; }
-p, label, .stCaption { color:#566078; }
-section[data-testid="stSidebar"] { background:linear-gradient(180deg,#171b3b 0%,#26245a 100%); }
-section[data-testid="stSidebar"] * { color:#f5f6ff !important; }
-section[data-testid="stSidebar"] [data-testid="stRadio"] label { padding:.5rem .65rem; border-radius:10px; }
-div[data-testid="stMetric"] { background:rgba(255,255,255,.88); border:1px solid rgba(222,226,241,.95); border-radius:18px; padding:17px 18px; box-shadow:0 8px 24px rgba(36,48,92,.045); min-height:112px; }
-div[data-testid="stMetric"] label { color:#69738d !important; font-size:.83rem !important; font-weight:600 !important; }
-div[data-testid="stMetric"] [data-testid="stMetricValue"] { color:#20264a; font-family:'Manrope',sans-serif; font-weight:800; }
-div[data-testid="stMetric"] [data-testid="stMetricDelta"] { font-size:.78rem; }
-.stSelectbox > div > div, .stTextInput > div > div, .stDateInput > div > div, .stNumberInput > div > div, .stTextArea textarea { border-radius:12px !important; border-color:#dfe4f1 !important; }
-.stButton > button, .stDownloadButton > button { border-radius:12px; border:0; background:linear-gradient(115deg,#6156d9,#4776e6); color:white; font-weight:700; padding:.58rem 1rem; box-shadow:0 6px 16px rgba(87,91,210,.18); transition:transform .15s ease,box-shadow .15s ease; }
-.stButton > button:hover, .stDownloadButton > button:hover { color:white; transform:translateY(-1px); box-shadow:0 9px 22px rgba(87,91,210,.25); }
-div[data-testid="stDataFrame"] { background:white; border:1px solid #e5e8f2; border-radius:16px; overflow:hidden; }
-div[data-testid="stAlert"] { border-radius:14px; border:1px solid #e4e8f5; }
-hr { border-color:#e4e8f2; }
-.hero-panel { background:linear-gradient(120deg,#171b3b 0%,#35317e 52%,#6558d9 100%); padding:30px 32px; border-radius:24px; color:#fff; margin:0 0 20px 0; box-shadow:0 16px 38px rgba(50,49,126,.18); position:relative; overflow:hidden; }
-.hero-panel:after { content:''; position:absolute; width:250px; height:250px; right:-55px; top:-105px; border:1px solid rgba(255,255,255,.18); border-radius:50%; box-shadow:0 0 0 28px rgba(255,255,255,.045),0 0 0 58px rgba(255,255,255,.035); }
-.hero-panel h1 { color:#fff !important; font-size:2.05rem !important; margin:7px 0 8px 0 !important; }
-.hero-panel p { color:#e3e7ff !important; margin:0; max-width:760px; font-size:1rem; }
-.eyebrow { color:#c9ceff; font-size:.72rem; font-weight:800; letter-spacing:.15em; text-transform:uppercase; }
-.subject-strip { background:rgba(255,255,255,.82); border:1px solid #e4e8f4; border-radius:16px; padding:13px 17px; margin:4px 0 15px 0; display:flex; justify-content:space-between; align-items:center; gap:12px; }
-.subject-strip strong { color:#25284f; font-size:1.05rem; }
-.subject-strip span { color:#747d97; font-size:.84rem; }
-.section-kicker { color:#7774d7; font-size:.72rem; font-weight:800; text-transform:uppercase; letter-spacing:.13em; margin-bottom:4px; }
-.insight-card { background:rgba(255,255,255,.94); border:1px solid #e4e8f4; border-radius:18px; padding:18px 18px 17px 18px; min-height:155px; box-shadow:0 8px 22px rgba(38,48,91,.04); }
-.insight-card .icon { font-size:1.3rem; margin-bottom:8px; }
-.insight-card .label { font-size:.75rem; color:#747d97; font-weight:700; text-transform:uppercase; letter-spacing:.06em; }
-.insight-card .value { color:#20264a; font-family:'Manrope',sans-serif; font-size:1.15rem; font-weight:800; margin:5px 0; }
-.insight-card .detail { color:#68718a; font-size:.85rem; line-height:1.45; }
-.priority-chip { display:inline-block; padding:4px 9px; border-radius:999px; font-size:.75rem; font-weight:800; background:#f0edff; color:#5948c6; }
-@media (max-width: 700px) { .block-container { padding-left:1rem; padding-right:1rem; } .hero-panel { padding:23px 20px; } .hero-panel h1 { font-size:1.6rem !important; } }
+:root{--ink:#202544;--muted:#69738c;--line:#e6eaf3;--violet:#6558d9;--blue:#4776e6;--surface:#fff}
+.stApp{background:radial-gradient(ellipse at 8% 0%,#eceeff 0,transparent 32%),linear-gradient(145deg,#f7f8fc 0%,#fbfcff 55%,#f1f4ff 100%);color:var(--ink);font-family:'DM Sans',sans-serif}
+.block-container{max-width:1500px;padding-top:1.2rem;padding-bottom:3rem}
+h1,h2,h3,h4{font-family:'Manrope','DM Sans',sans-serif!important;letter-spacing:-.035em;color:#202544}
+h1{font-weight:800!important} h2{font-weight:750!important} h3{font-weight:700!important}
+p, label, .stCaption{color:#5f6982}
+section[data-testid="stSidebar"]{background:linear-gradient(180deg,#171b39 0%,#26245a 100%)}
+section[data-testid="stSidebar"] h1,section[data-testid="stSidebar"] h2,section[data-testid="stSidebar"] h3,section[data-testid="stSidebar"] p,section[data-testid="stSidebar"] label,section[data-testid="stSidebar"] span{color:#f4f5ff!important}
+div[data-testid="stMetric"]{background:rgba(255,255,255,.9);border:1px solid #e4e8f3;border-radius:18px;padding:17px 18px;box-shadow:0 8px 24px rgba(38,48,91,.05);min-height:105px}
+div[data-testid="stMetric"] label{color:#707a93!important;font-size:.8rem!important;font-weight:700!important}
+div[data-testid="stMetric"] [data-testid="stMetricValue"]{color:#25284f;font-family:'Manrope',sans-serif;font-weight:800}
+.stSelectbox>div>div,.stTextInput>div>div,.stDateInput>div>div,.stNumberInput>div>div,.stTextArea textarea{border-radius:12px!important;border-color:#dfe4f1!important;background:#fff}
+.stButton>button,.stDownloadButton>button{border-radius:12px;border:1px solid #5d56cf;background:linear-gradient(115deg,#6156d9,#4776e6);color:#fff;font-weight:700;padding:.58rem 1rem;box-shadow:0 6px 16px rgba(87,91,210,.17);transition:transform .16s ease,box-shadow .16s ease}
+.stButton>button:hover,.stDownloadButton>button:hover{color:#fff;transform:translateY(-1px);box-shadow:0 10px 22px rgba(87,91,210,.23)}
+div[data-testid="stDataFrame"]{background:#fff;border:1px solid #e5e8f2;border-radius:15px;overflow:hidden}
+div[data-testid="stAlert"]{border-radius:14px;border:1px solid #e4e8f5}
+div[data-testid="stVerticalBlockBorderWrapper"]{background:rgba(255,255,255,.72);border:1px solid #e4e8f4;border-radius:18px;padding:5px;box-shadow:0 7px 22px rgba(38,48,91,.035)}
+div[role="radiogroup"]{gap:8px}
+div[role="radiogroup"] label{background:#fff;border:1px solid #e1e5f1;border-radius:12px;padding:9px 14px;transition:all .15s ease}
+div[role="radiogroup"] label:has(input:checked){background:#eeedff;border-color:#b9b3fa;color:#493fc0}
+.stProgress>div>div>div>div{background:linear-gradient(90deg,#6558d9,#4c91ed);border-radius:999px}
+hr{border-color:#e5e9f3;margin:1.4rem 0}
+.hero{position:relative;overflow:hidden;background:linear-gradient(115deg,#171b39 0%,#343179 55%,#6558d9 100%);padding:30px 32px;border-radius:24px;color:#fff;margin-bottom:22px;box-shadow:0 16px 38px rgba(50,49,126,.17)}
+.hero:after{content:'';position:absolute;width:230px;height:230px;right:-55px;top:-100px;border:1px solid rgba(255,255,255,.2);border-radius:50%;box-shadow:0 0 0 28px rgba(255,255,255,.045),0 0 0 58px rgba(255,255,255,.03)}
+.hero h1{color:#fff!important;font-size:2rem!important;margin:5px 0 8px 0!important;position:relative;z-index:1}
+.hero p{color:#e2e6ff!important;margin:0;max-width:760px;font-size:.98rem;position:relative;z-index:1}
+.eyebrow{font-size:.7rem;font-weight:800;letter-spacing:.16em;text-transform:uppercase;color:#c9ceff}
+.page-intro{padding:4px 0 8px 0}.page-intro p{color:#737d96;margin-top:-8px}
+.section-label{font-size:.7rem;font-weight:800;letter-spacing:.14em;text-transform:uppercase;color:#7771d6;margin-bottom:3px}
+@media(max-width:700px){.block-container{padding-left:1rem;padding-right:1rem}.hero{padding:23px 20px}.hero h1{font-size:1.55rem!important}}
 </style>
 """, unsafe_allow_html=True)
 
@@ -663,134 +658,6 @@ def analyze_subject(subject, files):
 
 
 # =========================================================
-# TOPIC INTELLIGENCE + PERSONAL READINESS HELPERS
-# =========================================================
-
-def topic_difficulty_from_counts(row):
-    """Estimate topic difficulty from extracted question classifications."""
-    total = int(row.get("Easy", 0)) + int(row.get("Medium", 0)) + int(row.get("Hard", 0))
-    if total == 0:
-        return "Insufficient data"
-
-    hard_ratio = float(row.get("Hard", 0)) / total
-    medium_or_hard_ratio = (
-        float(row.get("Medium", 0)) + float(row.get("Hard", 0))
-    ) / total
-    easy_ratio = float(row.get("Easy", 0)) / total
-
-    if hard_ratio >= 0.40 or medium_or_hard_ratio >= 0.80:
-        return "Hard"
-    if easy_ratio >= 0.65:
-        return "Easy"
-    return "Medium"
-
-
-def readiness_bonus(record):
-    """Return a transparent, bounded revision boost from student self-assessment."""
-    if not isinstance(record, dict):
-        return 0.0
-
-    level_bonus = {
-        "Very difficult": 20.0,
-        "Difficult": 15.0,
-        "Okay": 7.0,
-        "Confident": 0.0,
-        "Not assessed": 0.0,
-    }.get(record.get("readiness", "Not assessed"), 0.0)
-
-    try:
-        accuracy = max(0.0, min(100.0, float(record.get("accuracy", 100))))
-        accuracy_bonus = max(0.0, min(15.0, (60.0 - accuracy) * 0.25))
-    except (TypeError, ValueError):
-        accuracy_bonus = 0.0
-
-    return level_bonus + accuracy_bonus
-
-
-def sync_task_completion(task_id):
-    """Synchronize a checkbox value into the completed-task set on change."""
-    widget_key = f"task_{task_id}"
-    completed = st.session_state.setdefault("completed_tasks", set())
-
-    if st.session_state.get(widget_key, False):
-        completed.add(task_id)
-    else:
-        completed.discard(task_id)
-
-
-def rebuild_topic_summary(question_df, topic_names):
-    """Recalculate topic statistics after a topic assignment is manually corrected."""
-    summary = []
-
-    for topic in topic_names:
-        subset = question_df[question_df["Matched Topic"] == topic]
-        summary.append({
-            "Topic": topic,
-            "Questions": len(subset),
-            "Papers Appearing": subset["Paper"].nunique(),
-            "Theory": int((subset["Question Type"] == "Theory").sum()),
-            "Numerical": int((subset["Question Type"] == "Numerical").sum()),
-            "Derivation": int((subset["Question Type"] == "Derivation").sum()),
-            "Easy": int((subset["Difficulty (estimated)"] == "Easy").sum()),
-            "Medium": int((subset["Difficulty (estimated)"] == "Medium").sum()),
-            "Hard": int((subset["Difficulty (estimated)"] == "Hard").sum()),
-            "Marks Detected": subset["Marks (if detected)"].sum(min_count=1),
-        })
-
-    topic_df = pd.DataFrame(summary)
-    total_questions = max(len(question_df), 1)
-    total_papers = max(question_df["Paper"].nunique(), 1)
-
-    topic_df["Frequency %"] = (
-        topic_df["Questions"] / total_questions * 100
-    ).round(1)
-    topic_df["Paper Coverage %"] = (
-        topic_df["Papers Appearing"] / total_papers * 100
-    ).round(1)
-
-    total_marks = topic_df["Marks Detected"].sum(min_count=1)
-    if pd.notna(total_marks) and total_marks > 0:
-        topic_df["Detected Marks %"] = (
-            topic_df["Marks Detected"] / total_marks * 100
-        ).round(1)
-    else:
-        topic_df["Detected Marks %"] = None
-
-    topic_df["Priority Score"] = (
-        0.60 * topic_df["Frequency %"]
-        + 0.40 * topic_df["Paper Coverage %"]
-    ).round(1)
-
-    def priority(row):
-        if row["Questions"] == 0:
-            return "No mapped questions"
-        if row["Priority Score"] >= 40:
-            return "High"
-        if row["Priority Score"] >= 20:
-            return "Medium"
-        return "Low"
-
-    topic_df["Priority"] = topic_df.apply(priority, axis=1)
-    topic_df["Reason"] = topic_df.apply(
-        lambda row: (
-            "No question mapped to this topic."
-            if row["Questions"] == 0
-            else (
-                f"{int(row['Questions'])} question(s) across "
-                f"{int(row['Papers Appearing'])} paper(s)."
-            )
-        ),
-        axis=1,
-    )
-    topic_df["Difficulty (estimated)"] = topic_df.apply(
-        topic_difficulty_from_counts, axis=1
-    )
-    return topic_df.sort_values(
-        ["Priority Score", "Questions"], ascending=False
-    ).reset_index(drop=True)
-
-
-# =========================================================
 # STUDY PLAN INCLUDING REVISION
 # =========================================================
 
@@ -806,34 +673,11 @@ def build_timetable(analysis, daily_hours):
         if exam_date <= today:
             continue
 
-        readiness_map = subject.get("readiness", {})
-        difficult_topics = [
-            topic_name
-            for topic_name, record in readiness_map.items()
-            if isinstance(record, dict)
-            and record.get("readiness") in ("Difficult", "Very difficult")
-        ]
-
-        active_topics = topics[
-            (topics["Questions"] > 0)
-            | topics["Topic"].isin(difficult_topics)
-        ]
+        active_topics = topics[topics["Questions"] > 0]
 
         for _, row in active_topics.iterrows():
-            record = readiness_map.get(row["Topic"], {})
-            historical_score = float(row["Priority Score"])
-            personalized_score = min(
-                100.0, historical_score + readiness_bonus(record)
-            )
+            priority = row["Priority"]
 
-            if int(row["Questions"]) == 0 and not record:
-                continue
-
-            priority = (
-                "High" if personalized_score >= 40
-                else "Medium" if personalized_score >= 20
-                else "Low"
-            )
             minutes = (
                 75 if priority == "High"
                 else 50 if priority == "Medium"
@@ -846,7 +690,7 @@ def build_timetable(analysis, daily_hours):
                 "Priority": priority,
                 "Minutes": minutes,
                 "Exam Date": exam_date,
-                "Score": personalized_score,
+                "Score": float(row["Priority Score"]),
                 "Kind": "Study"
             })
 
@@ -964,8 +808,9 @@ def build_timetable(analysis, daily_hours):
 
 st.markdown("""
 <div class="hero">
-<h1>🎓 Exam Intelligence Assistant</h1>
-<p>Topic intelligence · Personalized priorities · A smarter revision plan</p>
+  <div class="eyebrow">PERSONAL ACADEMIC ANALYTICS</div>
+  <h1>Exam Intelligence Assistant</h1>
+  <p>Turn previous-year papers into clearer priorities, useful exam patterns, and a study plan you can actually follow.</p>
 </div>
 """, unsafe_allow_html=True)
 
@@ -988,10 +833,6 @@ dashboard_names = [
     "Study Planner"
 ]
 
-# Change the radio state before the widget is instantiated.
-if st.session_state.pop("navigate_to_intelligence", False):
-    st.session_state["active_dashboard"] = "Exam Intelligence"
-
 if st.session_state.active_dashboard not in dashboard_names:
     st.session_state.active_dashboard = dashboard_names[0]
 
@@ -1009,7 +850,8 @@ active_dashboard = st.radio(
 # =========================================================
 
 if active_dashboard == "Subjects & Setup":
-    st.header("📚 Subjects and Question Papers")
+    st.markdown("<div class='section-label'>WORKSPACE / SETUP</div>", unsafe_allow_html=True)
+    st.header("Subjects & Question Papers")
     st.write(
         "Create each subject separately. Enter one syllabus topic per line "
         "and upload all relevant previous-year papers."
@@ -1160,15 +1002,7 @@ if active_dashboard == "Subjects & Setup":
                 "name": name,
                 "exam_date": exam_date,
                 "questions": question_df,
-                "topics": topic_df,
-                "topic_names": [
-                    item.strip()
-                    for item in topics.splitlines()
-                    if item.strip()
-                ],
-                "readiness": st.session_state.get(
-                    f"readiness_{sid}", {}
-                )
+                "topics": topic_df
             })
 
         for error in errors:
@@ -1177,8 +1011,8 @@ if active_dashboard == "Subjects & Setup":
         if analyses:
             st.session_state.analysis = analyses
 
-            # Navigate before the radio widget is created on the next run.
-            st.session_state["navigate_to_intelligence"] = True
+            # Automatically switch to the analysis dashboard.
+            st.session_state.active_dashboard = "Exam Intelligence"
             st.rerun()
 
 
@@ -1187,19 +1021,38 @@ if active_dashboard == "Subjects & Setup":
 # =========================================================
 
 elif active_dashboard == "Exam Intelligence":
-    st.markdown("""
-    <div class="hero-panel">
-      <div class="eyebrow">YOUR EXAM COMMAND CENTER</div>
-      <h1>Study smarter. Walk in prepared.</h1>
-      <p>Turn previous question papers into clear revision priorities, topic trends, and syllabus coverage insights.</p>
-    </div>
-    """, unsafe_allow_html=True)
+    st.markdown("<div class='section-label'>WORKSPACE / ANALYTICS</div>", unsafe_allow_html=True)
+    st.header("Exam Intelligence")
+    st.caption("A clear view of question patterns, topic frequency, estimated difficulty, and revision priorities.")
 
     analyses = st.session_state.analysis
 
     if not analyses:
-        st.info("Add your subjects and analyze them first to unlock your exam dashboard.")
+        st.info("Add your subjects and analyze them first.")
     else:
+        total_questions = sum(
+            len(s["questions"]) for s in analyses
+        )
+
+        high_topics = sum(
+            int((s["topics"]["Priority"] == "High").sum())
+            for s in analyses
+        )
+
+        low_confidence = sum(
+            int(
+                s["questions"]["Match Status"].isin(
+                    ["Review suggested", "Low confidence — verify"]
+                ).sum()
+            )
+            for s in analyses
+        )
+
+        a, b, c = st.columns(3)
+        a.metric("Subjects analyzed", len(analyses))
+        b.metric("Questions extracted", total_questions)
+        c.metric("Matches to review", low_confidence)
+
         selected = st.selectbox(
             "Select subject",
             range(len(analyses)),
@@ -1207,224 +1060,104 @@ elif active_dashboard == "Exam Intelligence":
         )
 
         subject = analyses[selected]
-        questions = subject["questions"].copy()
-        topics = subject["topics"].copy()
-        topic_names = subject.get("topic_names", topics["Topic"].tolist())
+        questions = subject["questions"]
+        topics = subject["topics"]
 
-        # Backward compatibility for analyses created before the latest summary.
-        required_summary_columns = {
-            "Topic", "Questions", "Papers Appearing", "Frequency %",
-            "Paper Coverage %", "Priority Score", "Priority"
-        }
-        if not required_summary_columns.issubset(set(topics.columns)):
-            topics = rebuild_topic_summary(questions, topic_names)
-            subject["topics"] = topics
-            st.session_state.analysis[selected] = subject
+        st.subheader(subject["name"])
 
-        if "Difficulty (estimated)" not in topics.columns:
-            topics["Difficulty (estimated)"] = topics.apply(
-                topic_difficulty_from_counts, axis=1
-            )
-            subject["topics"] = topics
-            st.session_state.analysis[selected] = subject
-
-        total_questions = len(questions)
-        papers_count = int(questions["Paper"].nunique()) if "Paper" in questions else 0
-        topics_with_questions = int((topics["Questions"] > 0).sum())
-        topics_without_questions = int((topics["Questions"] == 0).sum())
-        days_remaining = max((subject["exam_date"] - date.today()).days, 0)
-
-        st.markdown(
-            f"<div class='subject-strip'><div><strong>📘 {subject['name']}</strong><br><span>Historical paper analysis · Revision overview</span></div><div class='priority-chip'>{len(topic_names)} syllabus topics</div></div>",
-            unsafe_allow_html=True
+        x, y, z = st.columns(3)
+        x.metric("Exam date", subject["exam_date"].strftime("%d %b %Y"))
+        y.metric(
+            "Days remaining",
+            max((subject["exam_date"] - date.today()).days, 0)
         )
-        a, b, c, d = st.columns(4)
-        a.metric("Questions analyzed", total_questions, help="Questions extracted from the uploaded papers.")
-        b.metric("Papers analyzed", papers_count, help="Unique uploaded papers included in this analysis.")
-        c.metric("Topics found", f"{topics_with_questions}/{len(topics)}", help="Topics with at least one question assigned in the uploaded papers.")
-        d.metric("Days until exam", days_remaining, help="Calculated from the exam date saved for this subject.")
+        z.metric("Papers analyzed", questions["Paper"].nunique())
 
-        st.markdown("<div class='section-kicker'>THE REVISION OVERVIEW</div>", unsafe_allow_html=True)
-        st.subheader("🔥 Smart Revision Priority")
-        st.caption(
-            "Rankings use the historical patterns in your uploaded papers. They guide revision; they cannot predict or guarantee the next exam."
+        st.subheader("🔥 Topic Frequency")
+        chart = topics[topics["Questions"] > 0].set_index("Topic")[
+            ["Questions"]
+        ]
+
+        if not chart.empty:
+            st.bar_chart(chart, horizontal=True)
+        else:
+            st.warning("No topics have been matched yet.")
+
+        st.subheader("Topic Priority and Weightage")
+
+        st.dataframe(
+            topics,
+            use_container_width=True,
+            hide_index=True
         )
 
-        priority_rows = []
-        for _, row in topics.iterrows():
-            question_count = int(row.get("Questions", 0) or 0)
-            papers_appearing = int(row.get("Papers Appearing", 0) or 0)
-            score = float(row.get("Priority Score", 0) or 0)
+        st.subheader("Question Type Pattern")
+        st.bar_chart(questions["Question Type"].value_counts())
 
-            if question_count == 0:
-                priority = "Evidence unavailable"
-                action = "Revise from the syllabus and class notes"
-            elif score >= 40:
-                priority = "High"
-                action = "Prioritize revision and practice"
-            elif score >= 20:
-                priority = "Medium"
-                action = "Include in planned revision"
-            else:
-                priority = "Lower"
-                action = "Review after higher-frequency topics"
-
-            priority_rows.append({
-                "Topic": row["Topic"],
-                "Questions found": question_count,
-                "Papers appearing in": papers_appearing,
-                "Frequency (%)": row.get("Frequency %", 0),
-                "Paper coverage (%)": row.get("Paper Coverage %", 0),
-                "Estimated difficulty": row.get(
-                    "Difficulty (estimated)", "Insufficient data"
-                ),
-                "Revision priority": priority,
-                "Suggested action": action,
-                "Priority score": round(score, 1)
-            })
-
-        priority_df = pd.DataFrame(priority_rows)
-        priority_order = {
-            "High": 0,
-            "Medium": 1,
-            "Lower": 2,
-            "Evidence unavailable": 3
-        }
-        priority_df["_order"] = priority_df["Revision priority"].map(priority_order)
-        priority_df = priority_df.sort_values(
-            ["_order", "Priority score", "Questions found"],
-            ascending=[True, False, False]
-        ).drop(columns=["_order"]).reset_index(drop=True)
-        priority_df.insert(0, "Rank", range(1, len(priority_df) + 1))
-
-        st.markdown(
-            f"<div class='section-kicker'>RANKED FROM YOUR PAPER HISTORY</div>",
-            unsafe_allow_html=True
+        st.subheader("Difficulty Distribution")
+        st.bar_chart(
+            questions["Difficulty (estimated)"].value_counts()
         )
-        st.dataframe(priority_df, use_container_width=True, hide_index=True)
+
+        st.subheader("Question Mapping")
+
+        status_filter = st.selectbox(
+            "Filter mapping results",
+            [
+                "All questions",
+                "Strong match",
+                "Review suggested",
+                "Low confidence — verify"
+            ]
+        )
+
+        shown = questions.copy()
+
+        if status_filter != "All questions":
+            shown = shown[
+                shown["Match Status"] == status_filter
+            ]
+
+        st.dataframe(
+            shown[
+                [
+                    "Paper", "Year", "Question No.", "Question",
+                    "Matched Topic", "Confidence %", "Match Status",
+                    "Score Gap %", "Question Type",
+                    "Difficulty (estimated)", "Marks (if detected)"
+                ]
+            ],
+            use_container_width=True,
+            hide_index=True
+        )
+
         st.download_button(
-            "📥 Download topic priority report (CSV)",
-            data=priority_df.to_csv(index=False).encode("utf-8"),
-            file_name=f"{subject['name'].replace(' ', '_')}_topic_priority.csv",
+            "📥 Download mapping CSV",
+            data=questions.to_csv(index=False).encode("utf-8"),
+            file_name="question_mapping.csv",
             mime="text/csv"
         )
 
-        st.divider()
-        st.markdown("<div class='section-kicker'>WHAT THE DATA IS TELLING YOU</div>", unsafe_allow_html=True)
-        st.subheader("💡 Actionable Exam Insights")
-
-        if not topics.empty:
-            mapped_topics = topics[topics["Questions"] > 0].copy()
-            unmapped_topics = topics[topics["Questions"] == 0]["Topic"].tolist()
-
-            if not mapped_topics.empty:
-                top_topic = mapped_topics.sort_values(
-                    ["Priority Score", "Questions"], ascending=False
-                ).iloc[0]
-                st.info(
-                    f"**Start here:** {top_topic['Topic']} has the strongest "
-                    f"historical priority score ({top_topic['Priority Score']}/100), "
-                    f"with {int(top_topic['Questions'])} question(s) across "
-                    f"{int(top_topic['Papers Appearing'])} paper(s)."
-                )
-
-                recurring = mapped_topics[mapped_topics["Papers Appearing"] >= 2]
-                if not recurring.empty:
-                    recurring_names = ", ".join(
-                        recurring.sort_values(
-                            ["Papers Appearing", "Questions"], ascending=False
-                        )["Topic"].head(5).tolist()
-                    )
-                    st.success(
-                        "**Recurring topics:** These topics appear in at least "
-                        f"two uploaded papers: {recurring_names}."
-                    )
-                else:
-                    st.write(
-                        "No topic appears in two or more uploaded papers yet. "
-                        "Upload more past papers to reveal recurring patterns."
-                    )
-            else:
-                st.warning(
-                    "No questions have been assigned to the entered topics. "
-                    "Check the uploaded papers and topic list before relying on the rankings."
-                )
-
-            if unmapped_topics:
-                st.warning(
-                    "**Not found in uploaded papers:** "
-                    + ", ".join(unmapped_topics[:10])
-                    + ("…" if len(unmapped_topics) > 10 else "")
-                    + ". This only means no question was assigned to these topics "
-                    "in the papers analyzed; it does not mean the topics are unimportant."
-                )
-
-        st.divider()
-        left, right = st.columns(2)
-
-        with left:
-            st.markdown("<div class='section-kicker'>QUESTION-LEVEL SIGNAL</div>", unsafe_allow_html=True)
-            st.subheader("📊 Estimated Topic Difficulty")
-            difficulty_counts = (
-                topics["Difficulty (estimated)"]
-                .value_counts()
-                .reindex(
-                    ["Easy", "Medium", "Hard", "Insufficient data"],
-                    fill_value=0
-                )
-            )
-            st.bar_chart(difficulty_counts)
-            st.caption(
-                "Difficulty is estimated from extracted questions. Topics without "
-                "enough assigned questions are marked as insufficient data."
-            )
-
-        with right:
-            st.markdown("<div class='section-kicker'>REPEATED TOPIC SIGNAL</div>", unsafe_allow_html=True)
-            st.subheader("📚 Questions by Topic")
-            frequency_chart = topics[topics["Questions"] > 0].set_index("Topic")[["Questions"]]
-            if not frequency_chart.empty:
-                st.bar_chart(frequency_chart, horizontal=True)
-            else:
-                st.info("Topic frequency will appear after questions are assigned to topics.")
-
-        st.divider()
-        st.markdown("<div class='section-kicker'>WHAT HAS SHOWN UP SO FAR?</div>", unsafe_allow_html=True)
-        st.subheader("🧭 Syllabus Coverage Insights")
-        coverage_df = topics[[
-            "Topic", "Questions", "Papers Appearing", "Paper Coverage %"
-        ]].copy()
-        coverage_df["Coverage status"] = coverage_df["Questions"].apply(
-            lambda count: (
-                "Found in uploaded papers" if int(count) > 0
-                else "Not found in uploaded papers"
-            )
-        )
-        coverage_df = coverage_df.rename(columns={
-            "Questions": "Questions found",
-            "Papers Appearing": "Papers found in",
-            "Paper Coverage %": "Paper coverage (%)"
-        })
-        st.dataframe(coverage_df, use_container_width=True, hide_index=True)
         st.caption(
-            "Coverage reflects only the papers you uploaded and the current topic assignments. "
-            "A topic not found here may still be important for the exam."
+            "Confidence is a similarity score, not a probability. "
+            "Review uncertain matches before relying on topic priorities."
         )
 
-        st.divider()
-        st.markdown("<div class='section-kicker'>PATTERNS OVER TIME</div>", unsafe_allow_html=True)
-        st.subheader("📅 Year-wise Topic Trends")
-        if "Year" in questions.columns and questions["Year"].notna().any():
-            year_data = questions.dropna(subset=["Year"]).copy()
+        st.subheader("Year-wise Trends")
+        year_data = questions.dropna(subset=["Year"]).copy()
+
+        if not year_data.empty:
             year_data["Year"] = year_data["Year"].astype(int)
+
             trend = year_data.groupby(
                 ["Year", "Matched Topic"]
             ).size().unstack(fill_value=0)
+
             st.line_chart(trend)
         else:
             st.info(
-                "Year-wise trends appear when a year is detected from the uploaded "
-                "paper filename, e.g. Maths_2024.pdf."
+                "Include a year in each filename, e.g. Maths_2024.pdf, "
+                "to enable year-wise trends."
             )
 
 
@@ -1433,7 +1166,9 @@ elif active_dashboard == "Exam Intelligence":
 # =========================================================
 
 elif active_dashboard == "Study Planner":
-    st.header("📅 Smart Study Planner")
+    st.markdown("<div class='section-label'>WORKSPACE / EXECUTION</div>", unsafe_allow_html=True)
+    st.header("Smart Study Planner")
+    st.caption("Turn your topic priorities into daily actions and track your progress as you go.")
 
     analyses = st.session_state.analysis
 
@@ -1512,20 +1247,18 @@ elif active_dashboard == "Study Planner":
                             f"({task['Minutes']} min; {task['Kind']})"
                         )
 
-                        widget_key = f"task_{task_id}"
-
-                        # Initialize each checkbox from the saved task set.
-                        if widget_key not in st.session_state:
-                            st.session_state[widget_key] = (
-                                task_id in st.session_state.completed_tasks
-                            )
-
-                        st.checkbox(
+                        checked = st.checkbox(
                             label,
-                            key=widget_key,
-                            on_change=sync_task_completion,
-                            args=(task_id,)
+                            value=(
+                                task_id in st.session_state.completed_tasks
+                            ),
+                            key=f"task_{task_id}"
                         )
+
+                        if checked:
+                            st.session_state.completed_tasks.add(task_id)
+                        else:
+                            st.session_state.completed_tasks.discard(task_id)
 
                     current_done = sum(
                         task_id in st.session_state.completed_tasks
@@ -1586,5 +1319,3 @@ st.caption(
     "Exam Intelligence Assistant | Free text analysis | "
     "Always verify low-confidence topic matches."
 )
-
-
