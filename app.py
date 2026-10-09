@@ -1,4 +1,5 @@
 
+
 import streamlit as st
 import pandas as pd
 import re
@@ -649,6 +650,134 @@ def analyze_subject(subject, files):
 
 
 # =========================================================
+# TOPIC INTELLIGENCE + PERSONAL READINESS HELPERS
+# =========================================================
+
+def topic_difficulty_from_counts(row):
+    """Estimate topic difficulty from extracted question classifications."""
+    total = int(row.get("Easy", 0)) + int(row.get("Medium", 0)) + int(row.get("Hard", 0))
+    if total == 0:
+        return "Insufficient data"
+
+    hard_ratio = float(row.get("Hard", 0)) / total
+    medium_or_hard_ratio = (
+        float(row.get("Medium", 0)) + float(row.get("Hard", 0))
+    ) / total
+    easy_ratio = float(row.get("Easy", 0)) / total
+
+    if hard_ratio >= 0.40 or medium_or_hard_ratio >= 0.80:
+        return "Hard"
+    if easy_ratio >= 0.65:
+        return "Easy"
+    return "Medium"
+
+
+def readiness_bonus(record):
+    """Return a transparent, bounded revision boost from student self-assessment."""
+    if not isinstance(record, dict):
+        return 0.0
+
+    level_bonus = {
+        "Very difficult": 20.0,
+        "Difficult": 15.0,
+        "Okay": 7.0,
+        "Confident": 0.0,
+        "Not assessed": 0.0,
+    }.get(record.get("readiness", "Not assessed"), 0.0)
+
+    try:
+        accuracy = max(0.0, min(100.0, float(record.get("accuracy", 100))))
+        accuracy_bonus = max(0.0, min(15.0, (60.0 - accuracy) * 0.25))
+    except (TypeError, ValueError):
+        accuracy_bonus = 0.0
+
+    return level_bonus + accuracy_bonus
+
+
+def sync_task_completion(task_id):
+    """Synchronize a checkbox value into the completed-task set on change."""
+    widget_key = f"task_{task_id}"
+    completed = st.session_state.setdefault("completed_tasks", set())
+
+    if st.session_state.get(widget_key, False):
+        completed.add(task_id)
+    else:
+        completed.discard(task_id)
+
+
+def rebuild_topic_summary(question_df, topic_names):
+    """Recalculate topic statistics after a topic assignment is manually corrected."""
+    summary = []
+
+    for topic in topic_names:
+        subset = question_df[question_df["Matched Topic"] == topic]
+        summary.append({
+            "Topic": topic,
+            "Questions": len(subset),
+            "Papers Appearing": subset["Paper"].nunique(),
+            "Theory": int((subset["Question Type"] == "Theory").sum()),
+            "Numerical": int((subset["Question Type"] == "Numerical").sum()),
+            "Derivation": int((subset["Question Type"] == "Derivation").sum()),
+            "Easy": int((subset["Difficulty (estimated)"] == "Easy").sum()),
+            "Medium": int((subset["Difficulty (estimated)"] == "Medium").sum()),
+            "Hard": int((subset["Difficulty (estimated)"] == "Hard").sum()),
+            "Marks Detected": subset["Marks (if detected)"].sum(min_count=1),
+        })
+
+    topic_df = pd.DataFrame(summary)
+    total_questions = max(len(question_df), 1)
+    total_papers = max(question_df["Paper"].nunique(), 1)
+
+    topic_df["Frequency %"] = (
+        topic_df["Questions"] / total_questions * 100
+    ).round(1)
+    topic_df["Paper Coverage %"] = (
+        topic_df["Papers Appearing"] / total_papers * 100
+    ).round(1)
+
+    total_marks = topic_df["Marks Detected"].sum(min_count=1)
+    if pd.notna(total_marks) and total_marks > 0:
+        topic_df["Detected Marks %"] = (
+            topic_df["Marks Detected"] / total_marks * 100
+        ).round(1)
+    else:
+        topic_df["Detected Marks %"] = None
+
+    topic_df["Priority Score"] = (
+        0.60 * topic_df["Frequency %"]
+        + 0.40 * topic_df["Paper Coverage %"]
+    ).round(1)
+
+    def priority(row):
+        if row["Questions"] == 0:
+            return "No mapped questions"
+        if row["Priority Score"] >= 40:
+            return "High"
+        if row["Priority Score"] >= 20:
+            return "Medium"
+        return "Low"
+
+    topic_df["Priority"] = topic_df.apply(priority, axis=1)
+    topic_df["Reason"] = topic_df.apply(
+        lambda row: (
+            "No question mapped to this topic."
+            if row["Questions"] == 0
+            else (
+                f"{int(row['Questions'])} question(s) across "
+                f"{int(row['Papers Appearing'])} paper(s)."
+            )
+        ),
+        axis=1,
+    )
+    topic_df["Difficulty (estimated)"] = topic_df.apply(
+        topic_difficulty_from_counts, axis=1
+    )
+    return topic_df.sort_values(
+        ["Priority Score", "Questions"], ascending=False
+    ).reset_index(drop=True)
+
+
+# =========================================================
 # STUDY PLAN INCLUDING REVISION
 # =========================================================
 
@@ -664,11 +793,34 @@ def build_timetable(analysis, daily_hours):
         if exam_date <= today:
             continue
 
-        active_topics = topics[topics["Questions"] > 0]
+        readiness_map = subject.get("readiness", {})
+        difficult_topics = [
+            topic_name
+            for topic_name, record in readiness_map.items()
+            if isinstance(record, dict)
+            and record.get("readiness") in ("Difficult", "Very difficult")
+        ]
+
+        active_topics = topics[
+            (topics["Questions"] > 0)
+            | topics["Topic"].isin(difficult_topics)
+        ]
 
         for _, row in active_topics.iterrows():
-            priority = row["Priority"]
+            record = readiness_map.get(row["Topic"], {})
+            historical_score = float(row["Priority Score"])
+            personalized_score = min(
+                100.0, historical_score + readiness_bonus(record)
+            )
 
+            if int(row["Questions"]) == 0 and not record:
+                continue
+
+            priority = (
+                "High" if personalized_score >= 40
+                else "Medium" if personalized_score >= 20
+                else "Low"
+            )
             minutes = (
                 75 if priority == "High"
                 else 50 if priority == "Medium"
@@ -681,7 +833,7 @@ def build_timetable(analysis, daily_hours):
                 "Priority": priority,
                 "Minutes": minutes,
                 "Exam Date": exam_date,
-                "Score": float(row["Priority Score"]),
+                "Score": personalized_score,
                 "Kind": "Study"
             })
 
@@ -800,7 +952,7 @@ def build_timetable(analysis, daily_hours):
 st.markdown("""
 <div class="hero">
 <h1>🎓 Exam Intelligence Assistant</h1>
-<p>Smarter question mapping · Topic priorities · A complete revision plan</p>
+<p>Topic intelligence · Personalized priorities · A smarter revision plan</p>
 </div>
 """, unsafe_allow_html=True)
 
@@ -822,6 +974,10 @@ dashboard_names = [
     "Exam Intelligence",
     "Study Planner"
 ]
+
+# Change the radio state before the widget is instantiated.
+if st.session_state.pop("navigate_to_intelligence", False):
+    st.session_state["active_dashboard"] = "Exam Intelligence"
 
 if st.session_state.active_dashboard not in dashboard_names:
     st.session_state.active_dashboard = dashboard_names[0]
@@ -991,7 +1147,15 @@ if active_dashboard == "Subjects & Setup":
                 "name": name,
                 "exam_date": exam_date,
                 "questions": question_df,
-                "topics": topic_df
+                "topics": topic_df,
+                "topic_names": [
+                    item.strip()
+                    for item in topics.splitlines()
+                    if item.strip()
+                ],
+                "readiness": st.session_state.get(
+                    f"readiness_{sid}", {}
+                )
             })
 
         for error in errors:
@@ -1000,8 +1164,8 @@ if active_dashboard == "Subjects & Setup":
         if analyses:
             st.session_state.analysis = analyses
 
-            # Automatically switch to the analysis dashboard.
-            st.session_state.active_dashboard = "Exam Intelligence"
+            # Navigate before the radio widget is created on the next run.
+            st.session_state["navigate_to_intelligence"] = True
             st.rerun()
 
 
@@ -1011,35 +1175,11 @@ if active_dashboard == "Subjects & Setup":
 
 elif active_dashboard == "Exam Intelligence":
     st.header("📊 Exam Intelligence")
-
     analyses = st.session_state.analysis
 
     if not analyses:
         st.info("Add your subjects and analyze them first.")
     else:
-        total_questions = sum(
-            len(s["questions"]) for s in analyses
-        )
-
-        high_topics = sum(
-            int((s["topics"]["Priority"] == "High").sum())
-            for s in analyses
-        )
-
-        low_confidence = sum(
-            int(
-                s["questions"]["Match Status"].isin(
-                    ["Review suggested", "Low confidence — verify"]
-                ).sum()
-            )
-            for s in analyses
-        )
-
-        a, b, c = st.columns(3)
-        a.metric("Subjects analyzed", len(analyses))
-        b.metric("Questions extracted", total_questions)
-        c.metric("Matches to review", low_confidence)
-
         selected = st.selectbox(
             "Select subject",
             range(len(analyses)),
@@ -1047,103 +1187,317 @@ elif active_dashboard == "Exam Intelligence":
         )
 
         subject = analyses[selected]
-        questions = subject["questions"]
-        topics = subject["topics"]
+        questions = subject["questions"].copy()
+        topics = subject["topics"].copy()
+        readiness_map = subject.setdefault("readiness", {})
+        topic_names = subject.get(
+            "topic_names", topics["Topic"].tolist()
+        )
+
+        # Backward compatibility for analyses created before this update.
+        if "Difficulty (estimated)" not in topics.columns:
+            topics["Difficulty (estimated)"] = topics.apply(
+                topic_difficulty_from_counts, axis=1
+            )
+        if "readiness" not in subject:
+            subject["readiness"] = {}
+            readiness_map = subject["readiness"]
+        if "topic_names" not in subject:
+            subject["topic_names"] = topic_names
+
+        # If older session data lacks a newer summary column, rebuild it.
+        required_summary_columns = {
+            "Topic", "Questions", "Papers Appearing", "Easy",
+            "Medium", "Hard", "Priority Score"
+        }
+        if not required_summary_columns.issubset(set(topics.columns)):
+            topics = rebuild_topic_summary(questions, topic_names)
+            subject["topics"] = topics
+
+        total_questions = len(questions)
+        review_count = int(
+            questions["Match Status"].isin(
+                ["Review suggested", "Low confidence — verify"]
+            ).sum()
+        )
+
+        a, b, c = st.columns(3)
+        a.metric("Subjects analyzed", len(analyses))
+        b.metric("Questions extracted", total_questions)
+        c.metric("Assignments to review", review_count)
 
         st.subheader(subject["name"])
-
         x, y, z = st.columns(3)
-        x.metric("Exam date", subject["exam_date"].strftime("%d %b %Y"))
+        x.metric(
+            "Exam date",
+            subject["exam_date"].strftime("%d %b %Y")
+        )
         y.metric(
             "Days remaining",
             max((subject["exam_date"] - date.today()).days, 0)
         )
         z.metric("Papers analyzed", questions["Paper"].nunique())
 
-        st.subheader("🔥 Topic Frequency")
-        chart = topics[topics["Questions"] > 0].set_index("Topic")[
-            ["Questions"]
-        ]
-
-        if not chart.empty:
-            st.bar_chart(chart, horizontal=True)
-        else:
-            st.warning("No topics have been matched yet.")
-
-        st.subheader("Topic Priority and Weightage")
-
-        st.dataframe(
-            topics,
-            use_container_width=True,
-            hide_index=True
+        # -------------------------------------------------
+        # PERSONAL WEAKNESS DETECTOR
+        # -------------------------------------------------
+        st.divider()
+        st.subheader("🎯 Personal Weakness Detector")
+        st.write(
+            "Rate your understanding and practice accuracy. "
+            "These self-reported results personalize your revision plan."
         )
 
-        st.subheader("Question Type Pattern")
-        st.bar_chart(questions["Question Type"].value_counts())
-
-        st.subheader("Difficulty Distribution")
-        st.bar_chart(
-            questions["Difficulty (estimated)"].value_counts()
-        )
-
-        st.subheader("Question Mapping")
-
-        status_filter = st.selectbox(
-            "Filter mapping results",
-            [
-                "All questions",
-                "Strong match",
-                "Review suggested",
-                "Low confidence — verify"
-            ]
-        )
-
-        shown = questions.copy()
-
-        if status_filter != "All questions":
-            shown = shown[
-                shown["Match Status"] == status_filter
-            ]
-
-        st.dataframe(
-            shown[
-                [
-                    "Paper", "Year", "Question No.", "Question",
-                    "Matched Topic", "Confidence %", "Match Status",
-                    "Score Gap %", "Question Type",
-                    "Difficulty (estimated)", "Marks (if detected)"
+        if topic_names:
+            with st.form(f"readiness_form_{subject['id']}"):
+                selected_topic = st.selectbox(
+                    "Choose a topic",
+                    topic_names,
+                    key=f"readiness_topic_{subject['id']}"
+                )
+                old_record = readiness_map.get(selected_topic, {})
+                readiness_options = [
+                    "Not assessed", "Confident", "Okay",
+                    "Difficult", "Very difficult"
                 ]
-            ],
-            use_container_width=True,
-            hide_index=True
-        )
+                old_level = old_record.get("readiness", "Not assessed")
+                if old_level not in readiness_options:
+                    old_level = "Not assessed"
 
+                readiness_level = st.selectbox(
+                    "How confident are you?",
+                    readiness_options,
+                    index=readiness_options.index(old_level),
+                    key=f"readiness_level_{subject['id']}"
+                )
+                practice_accuracy = st.slider(
+                    "Practice accuracy (%)",
+                    min_value=0,
+                    max_value=100,
+                    value=int(old_record.get("accuracy", 50)),
+                    key=f"accuracy_{subject['id']}"
+                )
+                save_readiness = st.form_submit_button(
+                    "Save assessment", type="primary"
+                )
+
+            if save_readiness:
+                readiness_map[selected_topic] = {
+                    "readiness": readiness_level,
+                    "accuracy": practice_accuracy
+                }
+                subject["readiness"] = readiness_map
+                st.session_state[f"readiness_{subject['id']}"] = readiness_map
+                st.session_state.analysis[selected] = subject
+                st.rerun()
+
+        # -------------------------------------------------
+        # SMART REVISION PRIORITY ENGINE
+        # -------------------------------------------------
+        st.divider()
+        st.subheader("🔥 Smart Revision Priority")
+
+        priority_rows = []
+        for _, row in topics.iterrows():
+            topic_name = row["Topic"]
+            record = readiness_map.get(topic_name, {})
+            historical_score = float(row.get("Priority Score", 0) or 0)
+            personalized_score = min(
+                100.0, historical_score + readiness_bonus(record)
+            )
+
+            if int(row.get("Questions", 0)) == 0 and not record:
+                recommendation = "Needs evidence"
+            elif personalized_score >= 40:
+                recommendation = "High"
+            elif personalized_score >= 20:
+                recommendation = "Medium"
+            else:
+                recommendation = "Low"
+
+            if int(row.get("Questions", 0)) == 0:
+                reason = "No questions confidently assigned to this topic."
+            else:
+                reason = (
+                    f"{int(row['Questions'])} assigned question(s) across "
+                    f"{int(row['Papers Appearing'])} paper(s)."
+                )
+
+            level = record.get("readiness", "Not assessed")
+            accuracy = record.get("accuracy")
+            if level in ("Difficult", "Very difficult"):
+                reason += " You reported difficulty with this topic."
+            if accuracy is not None and float(accuracy) < 60:
+                reason += " Your practice accuracy is below 60%."
+
+            priority_rows.append({
+                "Topic": topic_name,
+                "Questions": int(row.get("Questions", 0)),
+                "Papers": int(row.get("Papers Appearing", 0)),
+                "Difficulty (estimated)": row.get(
+                    "Difficulty (estimated)", "Insufficient data"
+                ),
+                "Historical score": round(historical_score, 1),
+                "Your readiness": level,
+                "Practice accuracy (%)": (
+                    accuracy if accuracy is not None else "Not entered"
+                ),
+                "Personalized score": round(personalized_score, 1),
+                "Recommended priority": recommendation,
+                "Reason": reason
+            })
+
+        priority_df = pd.DataFrame(priority_rows)
+        priority_df = priority_df.sort_values(
+            ["Personalized score", "Questions"],
+            ascending=False
+        ).reset_index(drop=True)
+        priority_df.insert(0, "Rank", range(1, len(priority_df) + 1))
+
+        st.caption(
+            "Historical score combines question frequency and paper coverage. "
+            "The personalized score adds a readiness bonus. These are revision "
+            "recommendations, not predictions of future exam questions."
+        )
+        st.dataframe(
+            priority_df, use_container_width=True, hide_index=True
+        )
         st.download_button(
-            "📥 Download mapping CSV",
-            data=questions.to_csv(index=False).encode("utf-8"),
-            file_name="question_mapping.csv",
+            "📥 Download topic priority report",
+            data=priority_df.to_csv(index=False).encode("utf-8"),
+            file_name="topic_priority_report.csv",
             mime="text/csv"
         )
 
+        # -------------------------------------------------
+        # TOPIC DIFFICULTY + FREQUENCY
+        # -------------------------------------------------
+        st.divider()
+        st.subheader("📈 Topic Difficulty Analysis")
+        difficulty_counts = (
+            topics["Difficulty (estimated)"]
+            .value_counts()
+            .reindex(
+                ["Easy", "Medium", "Hard", "Insufficient data"],
+                fill_value=0
+            )
+        )
+        st.bar_chart(difficulty_counts)
         st.caption(
-            "Confidence is a similarity score, not a probability. "
-            "Review uncertain matches before relying on topic priorities."
+            "Difficulty is estimated from extracted question wording. "
+            "Topics without assigned questions show insufficient data."
         )
 
-        st.subheader("Year-wise Trends")
-        year_data = questions.dropna(subset=["Year"]).copy()
+        st.subheader("📚 Historical Topic Frequency")
+        frequency_chart = topics[
+            topics["Questions"] > 0
+        ].set_index("Topic")[["Questions"]]
+        if not frequency_chart.empty:
+            st.bar_chart(frequency_chart, horizontal=True)
+        else:
+            st.warning(
+                "No topics have been assigned questions yet. "
+                "Review the extraction and topic list."
+            )
 
+        # -------------------------------------------------
+        # TRUST & VERIFICATION + MANUAL CORRECTION
+        # -------------------------------------------------
+        st.divider()
+        st.subheader("🛡️ Trust & Verification")
+        st.write(
+            "Review uncertain matches. You can manually correct a topic "
+            "assignment; the topic statistics and priorities will then update."
+        )
+
+        uncertain_indices = questions.index[
+            questions["Match Status"].isin(
+                ["Review suggested", "Low confidence — verify"]
+            )
+        ].tolist()
+
+        if uncertain_indices and topic_names:
+            with st.expander(
+                f"Review or correct {len(uncertain_indices)} uncertain assignment(s)"
+            ):
+                def question_label(idx):
+                    row = questions.loc[idx]
+                    preview = str(row["Question"])[:95]
+                    return (
+                        f"{row['Paper']} · Q{row['Question No.']} · {preview}"
+                    )
+
+                question_idx = st.selectbox(
+                    "Question to review",
+                    uncertain_indices,
+                    format_func=question_label,
+                    key=f"review_question_{subject['id']}"
+                )
+                current_topic = str(
+                    questions.loc[question_idx, "Matched Topic"]
+                )
+                if current_topic not in topic_names:
+                    current_topic = topic_names[0]
+
+                corrected_topic = st.selectbox(
+                    "Correct topic assignment",
+                    topic_names,
+                    index=topic_names.index(current_topic),
+                    key=f"correct_topic_{subject['id']}_{question_idx}"
+                )
+                if st.button(
+                    "Save topic correction",
+                    key=f"save_correction_{subject['id']}_{question_idx}",
+                    type="primary"
+                ):
+                    questions.loc[question_idx, "Matched Topic"] = corrected_topic
+                    questions.loc[question_idx, "Match Status"] = "Manually verified"
+                    subject["questions"] = questions
+                    subject["topics"] = rebuild_topic_summary(
+                        questions, topic_names
+                    )
+                    st.session_state.analysis[selected] = subject
+                    st.success(
+                        "Correction saved. Topic statistics and priority "
+                        "scores have been recalculated."
+                    )
+                    st.rerun()
+
+                st.dataframe(
+                    questions.loc[uncertain_indices, [
+                        "Paper", "Year", "Question No.", "Question",
+                        "Matched Topic", "Confidence %", "Match Status"
+                    ]],
+                    use_container_width=True,
+                    hide_index=True
+                )
+        else:
+            st.success(
+                "No uncertain assignments are currently flagged. "
+                "This does not guarantee every classification is correct."
+            )
+
+        st.caption(
+            "Similarity scores are not probabilities. Manually verified "
+            "assignments are marked separately; the original similarity "
+            "score is retained as a record of the automated match."
+        )
+
+        # -------------------------------------------------
+        # YEAR-WISE TRENDS
+        # -------------------------------------------------
+        st.divider()
+        st.subheader("📅 Year-wise Topic Trends")
+        year_data = questions.dropna(subset=["Year"]).copy()
         if not year_data.empty:
             year_data["Year"] = year_data["Year"].astype(int)
-
             trend = year_data.groupby(
                 ["Year", "Matched Topic"]
             ).size().unstack(fill_value=0)
-
             st.line_chart(trend)
         else:
             st.info(
-                "Include a year in each filename, e.g. Maths_2024.pdf, "
+                "Include a year in each PDF filename, e.g. Maths_2024.pdf, "
                 "to enable year-wise trends."
             )
 
@@ -1232,18 +1586,20 @@ elif active_dashboard == "Study Planner":
                             f"({task['Minutes']} min; {task['Kind']})"
                         )
 
-                        checked = st.checkbox(
-                            label,
-                            value=(
-                                task_id in st.session_state.completed_tasks
-                            ),
-                            key=f"task_{task_id}"
-                        )
+                        widget_key = f"task_{task_id}"
 
-                        if checked:
-                            st.session_state.completed_tasks.add(task_id)
-                        else:
-                            st.session_state.completed_tasks.discard(task_id)
+                        # Initialize each checkbox from the saved task set.
+                        if widget_key not in st.session_state:
+                            st.session_state[widget_key] = (
+                                task_id in st.session_state.completed_tasks
+                            )
+
+                        st.checkbox(
+                            label,
+                            key=widget_key,
+                            on_change=sync_task_completion,
+                            args=(task_id,)
+                        )
 
                     current_done = sum(
                         task_id in st.session_state.completed_tasks
