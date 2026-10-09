@@ -1,5 +1,4 @@
 
-
 import streamlit as st
 import pandas as pd
 import re
@@ -26,28 +25,42 @@ st.set_page_config(
 
 st.markdown("""
 <style>
-.stApp {
-    background: linear-gradient(140deg, #f5f7ff, #ffffff 65%);
-}
-.block-container {
-    padding-top: 1.5rem;
-    max-width: 1450px;
-}
-.hero {
-    background: linear-gradient(120deg, #172554, #4338ca, #7c3aed);
-    padding: 28px;
-    border-radius: 20px;
-    color: white;
-    margin-bottom: 22px;
-}
-.hero h1 { color: white; }
-.hero p { color: #e0e7ff; }
-div[data-testid="stMetric"] {
-    background: white;
-    border: 1px solid #e2e8f0;
-    border-radius: 14px;
-    padding: 14px;
-}
+@import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Manrope:wght@500;600;700;800&display=swap');
+:root { --ink:#18213b; --muted:#667085; --line:#e7eaf3; --purple:#6558d9; --blue:#4776e6; }
+.stApp { background: radial-gradient(circle at 8% 0%, #eef0ff 0, transparent 32%), linear-gradient(145deg,#f7f8fc 0%,#f9fbff 52%,#f2f5ff 100%); color:var(--ink); font-family:'DM Sans',sans-serif; }
+.block-container { padding-top:1.35rem; padding-bottom:3rem; max-width:1500px; }
+h1,h2,h3,h4 { font-family:'Manrope','DM Sans',sans-serif !important; letter-spacing:-.035em; color:#18213b; }
+h2 { margin-top:.25rem !important; }
+p, label, .stCaption { color:#566078; }
+section[data-testid="stSidebar"] { background:linear-gradient(180deg,#171b3b 0%,#26245a 100%); }
+section[data-testid="stSidebar"] * { color:#f5f6ff !important; }
+section[data-testid="stSidebar"] [data-testid="stRadio"] label { padding:.5rem .65rem; border-radius:10px; }
+div[data-testid="stMetric"] { background:rgba(255,255,255,.88); border:1px solid rgba(222,226,241,.95); border-radius:18px; padding:17px 18px; box-shadow:0 8px 24px rgba(36,48,92,.045); min-height:112px; }
+div[data-testid="stMetric"] label { color:#69738d !important; font-size:.83rem !important; font-weight:600 !important; }
+div[data-testid="stMetric"] [data-testid="stMetricValue"] { color:#20264a; font-family:'Manrope',sans-serif; font-weight:800; }
+div[data-testid="stMetric"] [data-testid="stMetricDelta"] { font-size:.78rem; }
+.stSelectbox > div > div, .stTextInput > div > div, .stDateInput > div > div, .stNumberInput > div > div, .stTextArea textarea { border-radius:12px !important; border-color:#dfe4f1 !important; }
+.stButton > button, .stDownloadButton > button { border-radius:12px; border:0; background:linear-gradient(115deg,#6156d9,#4776e6); color:white; font-weight:700; padding:.58rem 1rem; box-shadow:0 6px 16px rgba(87,91,210,.18); transition:transform .15s ease,box-shadow .15s ease; }
+.stButton > button:hover, .stDownloadButton > button:hover { color:white; transform:translateY(-1px); box-shadow:0 9px 22px rgba(87,91,210,.25); }
+div[data-testid="stDataFrame"] { background:white; border:1px solid #e5e8f2; border-radius:16px; overflow:hidden; }
+div[data-testid="stAlert"] { border-radius:14px; border:1px solid #e4e8f5; }
+hr { border-color:#e4e8f2; }
+.hero-panel { background:linear-gradient(120deg,#171b3b 0%,#35317e 52%,#6558d9 100%); padding:30px 32px; border-radius:24px; color:#fff; margin:0 0 20px 0; box-shadow:0 16px 38px rgba(50,49,126,.18); position:relative; overflow:hidden; }
+.hero-panel:after { content:''; position:absolute; width:250px; height:250px; right:-55px; top:-105px; border:1px solid rgba(255,255,255,.18); border-radius:50%; box-shadow:0 0 0 28px rgba(255,255,255,.045),0 0 0 58px rgba(255,255,255,.035); }
+.hero-panel h1 { color:#fff !important; font-size:2.05rem !important; margin:7px 0 8px 0 !important; }
+.hero-panel p { color:#e3e7ff !important; margin:0; max-width:760px; font-size:1rem; }
+.eyebrow { color:#c9ceff; font-size:.72rem; font-weight:800; letter-spacing:.15em; text-transform:uppercase; }
+.subject-strip { background:rgba(255,255,255,.82); border:1px solid #e4e8f4; border-radius:16px; padding:13px 17px; margin:4px 0 15px 0; display:flex; justify-content:space-between; align-items:center; gap:12px; }
+.subject-strip strong { color:#25284f; font-size:1.05rem; }
+.subject-strip span { color:#747d97; font-size:.84rem; }
+.section-kicker { color:#7774d7; font-size:.72rem; font-weight:800; text-transform:uppercase; letter-spacing:.13em; margin-bottom:4px; }
+.insight-card { background:rgba(255,255,255,.94); border:1px solid #e4e8f4; border-radius:18px; padding:18px 18px 17px 18px; min-height:155px; box-shadow:0 8px 22px rgba(38,48,91,.04); }
+.insight-card .icon { font-size:1.3rem; margin-bottom:8px; }
+.insight-card .label { font-size:.75rem; color:#747d97; font-weight:700; text-transform:uppercase; letter-spacing:.06em; }
+.insight-card .value { color:#20264a; font-family:'Manrope',sans-serif; font-size:1.15rem; font-weight:800; margin:5px 0; }
+.insight-card .detail { color:#68718a; font-size:.85rem; line-height:1.45; }
+.priority-chip { display:inline-block; padding:4px 9px; border-radius:999px; font-size:.75rem; font-weight:800; background:#f0edff; color:#5948c6; }
+@media (max-width: 700px) { .block-container { padding-left:1rem; padding-right:1rem; } .hero-panel { padding:23px 20px; } .hero-panel h1 { font-size:1.6rem !important; } }
 </style>
 """, unsafe_allow_html=True)
 
@@ -1174,11 +1187,18 @@ if active_dashboard == "Subjects & Setup":
 # =========================================================
 
 elif active_dashboard == "Exam Intelligence":
-    st.header("📊 Exam Intelligence")
+    st.markdown("""
+    <div class="hero-panel">
+      <div class="eyebrow">YOUR EXAM COMMAND CENTER</div>
+      <h1>Study smarter. Walk in prepared.</h1>
+      <p>Turn previous question papers into clear revision priorities, topic trends, and syllabus coverage insights.</p>
+    </div>
+    """, unsafe_allow_html=True)
+
     analyses = st.session_state.analysis
 
     if not analyses:
-        st.info("Add your subjects and analyze them first.")
+        st.info("Add your subjects and analyze them first to unlock your exam dashboard.")
     else:
         selected = st.selectbox(
             "Select subject",
@@ -1189,307 +1209,213 @@ elif active_dashboard == "Exam Intelligence":
         subject = analyses[selected]
         questions = subject["questions"].copy()
         topics = subject["topics"].copy()
-        readiness_map = subject.setdefault("readiness", {})
-        topic_names = subject.get(
-            "topic_names", topics["Topic"].tolist()
-        )
+        topic_names = subject.get("topic_names", topics["Topic"].tolist())
 
-        # Backward compatibility for analyses created before this update.
-        if "Difficulty (estimated)" not in topics.columns:
-            topics["Difficulty (estimated)"] = topics.apply(
-                topic_difficulty_from_counts, axis=1
-            )
-        if "readiness" not in subject:
-            subject["readiness"] = {}
-            readiness_map = subject["readiness"]
-        if "topic_names" not in subject:
-            subject["topic_names"] = topic_names
-
-        # If older session data lacks a newer summary column, rebuild it.
+        # Backward compatibility for analyses created before the latest summary.
         required_summary_columns = {
-            "Topic", "Questions", "Papers Appearing", "Easy",
-            "Medium", "Hard", "Priority Score"
+            "Topic", "Questions", "Papers Appearing", "Frequency %",
+            "Paper Coverage %", "Priority Score", "Priority"
         }
         if not required_summary_columns.issubset(set(topics.columns)):
             topics = rebuild_topic_summary(questions, topic_names)
             subject["topics"] = topics
+            st.session_state.analysis[selected] = subject
+
+        if "Difficulty (estimated)" not in topics.columns:
+            topics["Difficulty (estimated)"] = topics.apply(
+                topic_difficulty_from_counts, axis=1
+            )
+            subject["topics"] = topics
+            st.session_state.analysis[selected] = subject
 
         total_questions = len(questions)
-        review_count = int(
-            questions["Match Status"].isin(
-                ["Review suggested", "Low confidence — verify"]
-            ).sum()
+        papers_count = int(questions["Paper"].nunique()) if "Paper" in questions else 0
+        topics_with_questions = int((topics["Questions"] > 0).sum())
+        topics_without_questions = int((topics["Questions"] == 0).sum())
+        days_remaining = max((subject["exam_date"] - date.today()).days, 0)
+
+        st.markdown(
+            f"<div class='subject-strip'><div><strong>📘 {subject['name']}</strong><br><span>Historical paper analysis · Revision overview</span></div><div class='priority-chip'>{len(topic_names)} syllabus topics</div></div>",
+            unsafe_allow_html=True
         )
+        a, b, c, d = st.columns(4)
+        a.metric("Questions analyzed", total_questions, help="Questions extracted from the uploaded papers.")
+        b.metric("Papers analyzed", papers_count, help="Unique uploaded papers included in this analysis.")
+        c.metric("Topics found", f"{topics_with_questions}/{len(topics)}", help="Topics with at least one question assigned in the uploaded papers.")
+        d.metric("Days until exam", days_remaining, help="Calculated from the exam date saved for this subject.")
 
-        a, b, c = st.columns(3)
-        a.metric("Subjects analyzed", len(analyses))
-        b.metric("Questions extracted", total_questions)
-        c.metric("Assignments to review", review_count)
-
-        st.subheader(subject["name"])
-        x, y, z = st.columns(3)
-        x.metric(
-            "Exam date",
-            subject["exam_date"].strftime("%d %b %Y")
-        )
-        y.metric(
-            "Days remaining",
-            max((subject["exam_date"] - date.today()).days, 0)
-        )
-        z.metric("Papers analyzed", questions["Paper"].nunique())
-
-        # -------------------------------------------------
-        # PERSONAL WEAKNESS DETECTOR
-        # -------------------------------------------------
-        st.divider()
-        st.subheader("🎯 Personal Weakness Detector")
-        st.write(
-            "Rate your understanding and practice accuracy. "
-            "These self-reported results personalize your revision plan."
-        )
-
-        if topic_names:
-            with st.form(f"readiness_form_{subject['id']}"):
-                selected_topic = st.selectbox(
-                    "Choose a topic",
-                    topic_names,
-                    key=f"readiness_topic_{subject['id']}"
-                )
-                old_record = readiness_map.get(selected_topic, {})
-                readiness_options = [
-                    "Not assessed", "Confident", "Okay",
-                    "Difficult", "Very difficult"
-                ]
-                old_level = old_record.get("readiness", "Not assessed")
-                if old_level not in readiness_options:
-                    old_level = "Not assessed"
-
-                readiness_level = st.selectbox(
-                    "How confident are you?",
-                    readiness_options,
-                    index=readiness_options.index(old_level),
-                    key=f"readiness_level_{subject['id']}"
-                )
-                practice_accuracy = st.slider(
-                    "Practice accuracy (%)",
-                    min_value=0,
-                    max_value=100,
-                    value=int(old_record.get("accuracy", 50)),
-                    key=f"accuracy_{subject['id']}"
-                )
-                save_readiness = st.form_submit_button(
-                    "Save assessment", type="primary"
-                )
-
-            if save_readiness:
-                readiness_map[selected_topic] = {
-                    "readiness": readiness_level,
-                    "accuracy": practice_accuracy
-                }
-                subject["readiness"] = readiness_map
-                st.session_state[f"readiness_{subject['id']}"] = readiness_map
-                st.session_state.analysis[selected] = subject
-                st.rerun()
-
-        # -------------------------------------------------
-        # SMART REVISION PRIORITY ENGINE
-        # -------------------------------------------------
-        st.divider()
+        st.markdown("<div class='section-kicker'>THE REVISION OVERVIEW</div>", unsafe_allow_html=True)
         st.subheader("🔥 Smart Revision Priority")
+        st.caption(
+            "Rankings use the historical patterns in your uploaded papers. They guide revision; they cannot predict or guarantee the next exam."
+        )
 
         priority_rows = []
         for _, row in topics.iterrows():
-            topic_name = row["Topic"]
-            record = readiness_map.get(topic_name, {})
-            historical_score = float(row.get("Priority Score", 0) or 0)
-            personalized_score = min(
-                100.0, historical_score + readiness_bonus(record)
-            )
+            question_count = int(row.get("Questions", 0) or 0)
+            papers_appearing = int(row.get("Papers Appearing", 0) or 0)
+            score = float(row.get("Priority Score", 0) or 0)
 
-            if int(row.get("Questions", 0)) == 0 and not record:
-                recommendation = "Needs evidence"
-            elif personalized_score >= 40:
-                recommendation = "High"
-            elif personalized_score >= 20:
-                recommendation = "Medium"
+            if question_count == 0:
+                priority = "Evidence unavailable"
+                action = "Revise from the syllabus and class notes"
+            elif score >= 40:
+                priority = "High"
+                action = "Prioritize revision and practice"
+            elif score >= 20:
+                priority = "Medium"
+                action = "Include in planned revision"
             else:
-                recommendation = "Low"
-
-            if int(row.get("Questions", 0)) == 0:
-                reason = "No questions confidently assigned to this topic."
-            else:
-                reason = (
-                    f"{int(row['Questions'])} assigned question(s) across "
-                    f"{int(row['Papers Appearing'])} paper(s)."
-                )
-
-            level = record.get("readiness", "Not assessed")
-            accuracy = record.get("accuracy")
-            if level in ("Difficult", "Very difficult"):
-                reason += " You reported difficulty with this topic."
-            if accuracy is not None and float(accuracy) < 60:
-                reason += " Your practice accuracy is below 60%."
+                priority = "Lower"
+                action = "Review after higher-frequency topics"
 
             priority_rows.append({
-                "Topic": topic_name,
-                "Questions": int(row.get("Questions", 0)),
-                "Papers": int(row.get("Papers Appearing", 0)),
-                "Difficulty (estimated)": row.get(
+                "Topic": row["Topic"],
+                "Questions found": question_count,
+                "Papers appearing in": papers_appearing,
+                "Frequency (%)": row.get("Frequency %", 0),
+                "Paper coverage (%)": row.get("Paper Coverage %", 0),
+                "Estimated difficulty": row.get(
                     "Difficulty (estimated)", "Insufficient data"
                 ),
-                "Historical score": round(historical_score, 1),
-                "Your readiness": level,
-                "Practice accuracy (%)": (
-                    accuracy if accuracy is not None else "Not entered"
-                ),
-                "Personalized score": round(personalized_score, 1),
-                "Recommended priority": recommendation,
-                "Reason": reason
+                "Revision priority": priority,
+                "Suggested action": action,
+                "Priority score": round(score, 1)
             })
 
         priority_df = pd.DataFrame(priority_rows)
+        priority_order = {
+            "High": 0,
+            "Medium": 1,
+            "Lower": 2,
+            "Evidence unavailable": 3
+        }
+        priority_df["_order"] = priority_df["Revision priority"].map(priority_order)
         priority_df = priority_df.sort_values(
-            ["Personalized score", "Questions"],
-            ascending=False
-        ).reset_index(drop=True)
+            ["_order", "Priority score", "Questions found"],
+            ascending=[True, False, False]
+        ).drop(columns=["_order"]).reset_index(drop=True)
         priority_df.insert(0, "Rank", range(1, len(priority_df) + 1))
 
-        st.caption(
-            "Historical score combines question frequency and paper coverage. "
-            "The personalized score adds a readiness bonus. These are revision "
-            "recommendations, not predictions of future exam questions."
+        st.markdown(
+            f"<div class='section-kicker'>RANKED FROM YOUR PAPER HISTORY</div>",
+            unsafe_allow_html=True
         )
-        st.dataframe(
-            priority_df, use_container_width=True, hide_index=True
-        )
+        st.dataframe(priority_df, use_container_width=True, hide_index=True)
         st.download_button(
-            "📥 Download topic priority report",
+            "📥 Download topic priority report (CSV)",
             data=priority_df.to_csv(index=False).encode("utf-8"),
-            file_name="topic_priority_report.csv",
+            file_name=f"{subject['name'].replace(' ', '_')}_topic_priority.csv",
             mime="text/csv"
         )
 
-        # -------------------------------------------------
-        # TOPIC DIFFICULTY + FREQUENCY
-        # -------------------------------------------------
         st.divider()
-        st.subheader("📈 Topic Difficulty Analysis")
-        difficulty_counts = (
-            topics["Difficulty (estimated)"]
-            .value_counts()
-            .reindex(
-                ["Easy", "Medium", "Hard", "Insufficient data"],
-                fill_value=0
-            )
-        )
-        st.bar_chart(difficulty_counts)
-        st.caption(
-            "Difficulty is estimated from extracted question wording. "
-            "Topics without assigned questions show insufficient data."
-        )
+        st.markdown("<div class='section-kicker'>WHAT THE DATA IS TELLING YOU</div>", unsafe_allow_html=True)
+        st.subheader("💡 Actionable Exam Insights")
 
-        st.subheader("📚 Historical Topic Frequency")
-        frequency_chart = topics[
-            topics["Questions"] > 0
-        ].set_index("Topic")[["Questions"]]
-        if not frequency_chart.empty:
-            st.bar_chart(frequency_chart, horizontal=True)
-        else:
-            st.warning(
-                "No topics have been assigned questions yet. "
-                "Review the extraction and topic list."
-            )
+        if not topics.empty:
+            mapped_topics = topics[topics["Questions"] > 0].copy()
+            unmapped_topics = topics[topics["Questions"] == 0]["Topic"].tolist()
 
-        # -------------------------------------------------
-        # TRUST & VERIFICATION + MANUAL CORRECTION
-        # -------------------------------------------------
-        st.divider()
-        st.subheader("🛡️ Trust & Verification")
-        st.write(
-            "Review uncertain matches. You can manually correct a topic "
-            "assignment; the topic statistics and priorities will then update."
-        )
+            if not mapped_topics.empty:
+                top_topic = mapped_topics.sort_values(
+                    ["Priority Score", "Questions"], ascending=False
+                ).iloc[0]
+                st.info(
+                    f"**Start here:** {top_topic['Topic']} has the strongest "
+                    f"historical priority score ({top_topic['Priority Score']}/100), "
+                    f"with {int(top_topic['Questions'])} question(s) across "
+                    f"{int(top_topic['Papers Appearing'])} paper(s)."
+                )
 
-        uncertain_indices = questions.index[
-            questions["Match Status"].isin(
-                ["Review suggested", "Low confidence — verify"]
-            )
-        ].tolist()
-
-        if uncertain_indices and topic_names:
-            with st.expander(
-                f"Review or correct {len(uncertain_indices)} uncertain assignment(s)"
-            ):
-                def question_label(idx):
-                    row = questions.loc[idx]
-                    preview = str(row["Question"])[:95]
-                    return (
-                        f"{row['Paper']} · Q{row['Question No.']} · {preview}"
+                recurring = mapped_topics[mapped_topics["Papers Appearing"] >= 2]
+                if not recurring.empty:
+                    recurring_names = ", ".join(
+                        recurring.sort_values(
+                            ["Papers Appearing", "Questions"], ascending=False
+                        )["Topic"].head(5).tolist()
                     )
-
-                question_idx = st.selectbox(
-                    "Question to review",
-                    uncertain_indices,
-                    format_func=question_label,
-                    key=f"review_question_{subject['id']}"
-                )
-                current_topic = str(
-                    questions.loc[question_idx, "Matched Topic"]
-                )
-                if current_topic not in topic_names:
-                    current_topic = topic_names[0]
-
-                corrected_topic = st.selectbox(
-                    "Correct topic assignment",
-                    topic_names,
-                    index=topic_names.index(current_topic),
-                    key=f"correct_topic_{subject['id']}_{question_idx}"
-                )
-                if st.button(
-                    "Save topic correction",
-                    key=f"save_correction_{subject['id']}_{question_idx}",
-                    type="primary"
-                ):
-                    questions.loc[question_idx, "Matched Topic"] = corrected_topic
-                    questions.loc[question_idx, "Match Status"] = "Manually verified"
-                    subject["questions"] = questions
-                    subject["topics"] = rebuild_topic_summary(
-                        questions, topic_names
-                    )
-                    st.session_state.analysis[selected] = subject
                     st.success(
-                        "Correction saved. Topic statistics and priority "
-                        "scores have been recalculated."
+                        "**Recurring topics:** These topics appear in at least "
+                        f"two uploaded papers: {recurring_names}."
                     )
-                    st.rerun()
-
-                st.dataframe(
-                    questions.loc[uncertain_indices, [
-                        "Paper", "Year", "Question No.", "Question",
-                        "Matched Topic", "Confidence %", "Match Status"
-                    ]],
-                    use_container_width=True,
-                    hide_index=True
+                else:
+                    st.write(
+                        "No topic appears in two or more uploaded papers yet. "
+                        "Upload more past papers to reveal recurring patterns."
+                    )
+            else:
+                st.warning(
+                    "No questions have been assigned to the entered topics. "
+                    "Check the uploaded papers and topic list before relying on the rankings."
                 )
-        else:
-            st.success(
-                "No uncertain assignments are currently flagged. "
-                "This does not guarantee every classification is correct."
+
+            if unmapped_topics:
+                st.warning(
+                    "**Not found in uploaded papers:** "
+                    + ", ".join(unmapped_topics[:10])
+                    + ("…" if len(unmapped_topics) > 10 else "")
+                    + ". This only means no question was assigned to these topics "
+                    "in the papers analyzed; it does not mean the topics are unimportant."
+                )
+
+        st.divider()
+        left, right = st.columns(2)
+
+        with left:
+            st.markdown("<div class='section-kicker'>QUESTION-LEVEL SIGNAL</div>", unsafe_allow_html=True)
+            st.subheader("📊 Estimated Topic Difficulty")
+            difficulty_counts = (
+                topics["Difficulty (estimated)"]
+                .value_counts()
+                .reindex(
+                    ["Easy", "Medium", "Hard", "Insufficient data"],
+                    fill_value=0
+                )
+            )
+            st.bar_chart(difficulty_counts)
+            st.caption(
+                "Difficulty is estimated from extracted questions. Topics without "
+                "enough assigned questions are marked as insufficient data."
             )
 
+        with right:
+            st.markdown("<div class='section-kicker'>REPEATED TOPIC SIGNAL</div>", unsafe_allow_html=True)
+            st.subheader("📚 Questions by Topic")
+            frequency_chart = topics[topics["Questions"] > 0].set_index("Topic")[["Questions"]]
+            if not frequency_chart.empty:
+                st.bar_chart(frequency_chart, horizontal=True)
+            else:
+                st.info("Topic frequency will appear after questions are assigned to topics.")
+
+        st.divider()
+        st.markdown("<div class='section-kicker'>WHAT HAS SHOWN UP SO FAR?</div>", unsafe_allow_html=True)
+        st.subheader("🧭 Syllabus Coverage Insights")
+        coverage_df = topics[[
+            "Topic", "Questions", "Papers Appearing", "Paper Coverage %"
+        ]].copy()
+        coverage_df["Coverage status"] = coverage_df["Questions"].apply(
+            lambda count: (
+                "Found in uploaded papers" if int(count) > 0
+                else "Not found in uploaded papers"
+            )
+        )
+        coverage_df = coverage_df.rename(columns={
+            "Questions": "Questions found",
+            "Papers Appearing": "Papers found in",
+            "Paper Coverage %": "Paper coverage (%)"
+        })
+        st.dataframe(coverage_df, use_container_width=True, hide_index=True)
         st.caption(
-            "Similarity scores are not probabilities. Manually verified "
-            "assignments are marked separately; the original similarity "
-            "score is retained as a record of the automated match."
+            "Coverage reflects only the papers you uploaded and the current topic assignments. "
+            "A topic not found here may still be important for the exam."
         )
 
-        # -------------------------------------------------
-        # YEAR-WISE TRENDS
-        # -------------------------------------------------
         st.divider()
+        st.markdown("<div class='section-kicker'>PATTERNS OVER TIME</div>", unsafe_allow_html=True)
         st.subheader("📅 Year-wise Topic Trends")
-        year_data = questions.dropna(subset=["Year"]).copy()
-        if not year_data.empty:
+        if "Year" in questions.columns and questions["Year"].notna().any():
+            year_data = questions.dropna(subset=["Year"]).copy()
             year_data["Year"] = year_data["Year"].astype(int)
             trend = year_data.groupby(
                 ["Year", "Matched Topic"]
@@ -1497,8 +1423,8 @@ elif active_dashboard == "Exam Intelligence":
             st.line_chart(trend)
         else:
             st.info(
-                "Include a year in each PDF filename, e.g. Maths_2024.pdf, "
-                "to enable year-wise trends."
+                "Year-wise trends appear when a year is detected from the uploaded "
+                "paper filename, e.g. Maths_2024.pdf."
             )
 
 
@@ -1660,3 +1586,5 @@ st.caption(
     "Exam Intelligence Assistant | Free text analysis | "
     "Always verify low-confidence topic matches."
 )
+
+
