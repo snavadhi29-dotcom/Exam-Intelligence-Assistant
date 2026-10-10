@@ -1,6 +1,7 @@
 
 import streamlit as st
 import pandas as pd
+import plotly.graph_objects as go
 import re
 import hashlib
 from io import BytesIO
@@ -33,7 +34,7 @@ st.markdown("""
  --muted:#64708a; --line:#e1e6ef; --primary:#4263eb;
  --primary-hover:#3451cf; --teal:#0b8f8a; --purple:#7957c6;
  --midnight:#11192e; --sidebar-text:#e6ecfa; --sidebar-muted:#aab7d2;
- --tint:#eef2ff; --success:#e9f7f4; --shadow:0 4px 16px #18264708;
+ --pink:#d66ca6; --amber:#e8ac45; --grid:#edf0f6; --tint:#eef2ff; --success:#e9f7f4; --shadow:0 4px 16px #18264708;
  --font-body:'IBM Plex Sans',sans-serif;
  --font-heading:'Libre Baskerville',Georgia,serif;
 }
@@ -76,6 +77,7 @@ section[data-testid="stSidebar"] [role="radiogroup"] label:has(input:checked) {b
 .summary-item:nth-child(3) {border-color:var(--purple)}
 .summary-item span {display:block;font-size:12px;color:var(--muted);margin-bottom:4px}
 .summary-item strong {font-weight:600;font-size:24px;color:var(--ink)}
+[data-testid="stPlotlyChart"] {border:1px solid var(--line);border-radius:8px;background:var(--surface);overflow:hidden}
 [data-testid="stMetric"] {background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:18px 20px;box-shadow:var(--shadow);min-height:112px}
 [data-testid="stMetric"] label {font-size:12px!important;font-weight:500!important}
 [data-testid="stMetricValue"] {font-family:var(--font-body);font-size:28px;font-weight:600;color:var(--ink)}
@@ -852,6 +854,138 @@ def build_timetable(analysis, daily_hours):
 
 
 # =========================================================
+# VISUAL ANALYTICS — shared palette, real data only
+# =========================================================
+CHART_THEME = {
+    "ink": "#20283f", "muted": "#64708a", "surface": "#ffffff",
+    "grid": "#edf0f6", "blue": "#4263eb", "teal": "#0b8f8a",
+    "purple": "#7957c6", "pink": "#d66ca6", "amber": "#e8ac45",
+}
+CHART_COLORS = [CHART_THEME[k] for k in ("blue", "teal", "purple", "pink", "amber")]
+PRIORITY_COLORS = dict(zip(
+    ["High", "Medium", "Low", "No mapped questions", "Revision"],
+    [CHART_THEME["blue"], CHART_THEME["amber"], CHART_THEME["teal"],
+     CHART_THEME["grid"], CHART_THEME["purple"]]
+))
+
+
+def style_figure(fig, height=310):
+    fig.update_layout(
+        template="plotly_white", height=height,
+        paper_bgcolor=CHART_THEME["surface"], plot_bgcolor=CHART_THEME["surface"],
+        font=dict(family="IBM Plex Sans, sans-serif", size=12, color=CHART_THEME["muted"]),
+        margin=dict(l=24, r=24, t=24, b=50),
+        legend=dict(orientation="h", y=-0.18, x=0, font=dict(size=11)),
+        hoverlabel=dict(bgcolor=CHART_THEME["surface"], font_size=12),
+        colorway=CHART_COLORS,
+    )
+    fig.update_xaxes(gridcolor=CHART_THEME["grid"], zeroline=False, automargin=True)
+    fig.update_yaxes(gridcolor=CHART_THEME["grid"], zeroline=False, automargin=True)
+    return fig
+
+
+def show_figure(fig, key):
+    st.plotly_chart(fig, use_container_width=True, key=key,
+                    config={"displayModeBar": False, "scrollZoom": False, "responsive": True})
+
+
+def donut_figure(labels, values, center, caption, colors=None):
+    values = list(values)
+    labels = list(labels)
+    empty = sum(values) == 0
+    fig = go.Figure(go.Pie(
+        labels=["No data yet"] if empty else labels,
+        values=[1] if empty else values,
+        hole=0.76, sort=False, direction="clockwise", textinfo="none",
+        marker=dict(colors=[CHART_THEME["grid"]] if empty else (colors or CHART_COLORS),
+                    line=dict(color=CHART_THEME["surface"], width=3)),
+        hovertemplate="%{label}: %{value} (%{percent})<extra></extra>" if not empty else "No data yet<extra></extra>",
+        showlegend=not empty,
+    ))
+    style_figure(fig)
+    fig.update_layout(annotations=[
+        dict(text=str(center), x=0.5, y=0.54, showarrow=False,
+             font=dict(size=32, color=CHART_THEME["ink"])),
+        dict(text=caption, x=0.5, y=0.40, showarrow=False,
+             font=dict(size=11, color=CHART_THEME["muted"]))
+    ])
+    return fig
+
+
+def horizontal_figure(labels, values, color=None):
+    fig = go.Figure(go.Bar(
+        x=list(values), y=list(labels), orientation="h",
+        marker_color=color or CHART_THEME["blue"],
+        text=list(values), textposition="outside", cliponaxis=False,
+        hovertemplate="%{y}: %{x}<extra></extra>",
+    ))
+    style_figure(fig, max(290, 42 * len(labels) + 70))
+    fig.update_yaxes(autorange="reversed", showgrid=False)
+    fig.update_xaxes(rangemode="tozero", dtick=1)
+    fig.update_layout(showlegend=False, bargap=0.42, margin=dict(r=55))
+    return fig
+
+
+def task_progress_data(timetable, completed_tasks):
+    """Only task IDs in the current plan contribute to progress."""
+    data = timetable.copy()
+    if data.empty:
+        return data, 0, 0, 0
+    data["Completed"] = data["Task ID"].isin(completed_tasks)
+    total = len(data)
+    done = int(data["Completed"].sum())
+    return data, done, total, round(done / total * 100)
+
+
+def sync_task_completion(task_id):
+    # Callbacks execute before the full rerun, so all charts update immediately.
+    if st.session_state.get(f"task_{task_id}", False):
+        st.session_state.completed_tasks.add(task_id)
+    else:
+        st.session_state.completed_tasks.discard(task_id)
+
+
+def render_plan_charts(timetable):
+    data, done, total, percent = task_progress_data(timetable, st.session_state.completed_tasks)
+    if not total:
+        return
+    left, right = st.columns([1, 1.6])
+    with left:
+        st.subheader("Task completion")
+        show_figure(donut_figure(["Completed", "Remaining"], [done, total-done],
+                    f"{percent}%", f"{done} of {total} tasks", [CHART_THEME["teal"], CHART_THEME["grid"]]), "task_completion")
+    with right:
+        st.subheader("Subject progress")
+        by_subject = data.groupby("Subject", sort=False)["Completed"].agg(["sum", "count"])
+        fig = go.Figure()
+        for label, vals, color in [
+            ("Completed", by_subject["sum"], CHART_THEME["teal"]),
+            ("Remaining", by_subject["count"]-by_subject["sum"], CHART_THEME["blue"]),
+        ]:
+            fig.add_bar(name=label, x=by_subject.index, y=vals, marker_color=color,
+                        hovertemplate="%{x}: %{y} tasks<extra>"+label+"</extra>")
+        style_figure(fig)
+        fig.update_layout(barmode="stack", bargap=0.55)
+        fig.update_yaxes(title="Tasks", dtick=1)
+        show_figure(fig, "subject_completion")
+    st.subheader("Study workload")
+    fig = go.Figure()
+    dates = sorted(data["Date"].unique())
+    for label, mask, color in [
+        ("Completed", data["Completed"], CHART_THEME["teal"]),
+        ("Remaining", ~data["Completed"], CHART_THEME["blue"]),
+    ]:
+        minutes = data[mask].groupby("Date")["Minutes"].sum().reindex(dates, fill_value=0)
+        fig.add_bar(name=label, x=[d.isoformat() for d in dates], y=minutes, marker_color=color,
+                    hovertemplate="%{x}: %{y} minutes<extra>"+label+"</extra>")
+    style_figure(fig, 270)
+    fig.update_layout(barmode="stack", bargap=0.45)
+    fig.update_xaxes(type="category")
+    fig.update_yaxes(title="Minutes")
+    show_figure(fig, "daily_workload")
+
+
+# =========================================================
 # WORKSPACE SHELL AND NAVIGATION
 # =========================================================
 
@@ -1137,15 +1271,20 @@ elif active_dashboard == "Exam Intelligence":
         )
         z.metric("Papers analyzed", questions["Paper"].nunique())
 
-        st.subheader("Topic frequency")
-        chart = topics[topics["Questions"] > 0].set_index("Topic")[
-            ["Questions"]
-        ]
-
-        if not chart.empty:
-            st.bar_chart(chart, horizontal=True, color="#4263eb")
-        else:
-            st.warning("No topics have been matched yet.")
+        left, right = st.columns([1.6, 1])
+        with left:
+            st.subheader("Topic frequency")
+            chart = topics[topics["Questions"] > 0].head(12)
+            if not chart.empty:
+                show_figure(horizontal_figure(chart["Topic"], chart["Questions"],
+                            [PRIORITY_COLORS[p] for p in chart["Priority"]]), "topic_frequency")
+            else:
+                st.info("No mapped questions yet.")
+        with right:
+            st.subheader("Priority distribution")
+            priorities = topics["Priority"].value_counts()
+            show_figure(donut_figure(priorities.index, priorities.values, len(topics), "syllabus topics",
+                        [PRIORITY_COLORS[p] for p in priorities.index]), "priority_distribution")
 
         st.subheader("Topic Priority and Weightage")
 
@@ -1155,13 +1294,16 @@ elif active_dashboard == "Exam Intelligence":
             hide_index=True
         )
 
-        st.subheader("Question Type Pattern")
-        st.bar_chart(questions["Question Type"].value_counts(), color="#0b8f8a")
-
-        st.subheader("Difficulty Distribution")
-        st.bar_chart(
-            questions["Difficulty (estimated)"].value_counts(), color="#7957c6"
-        )
+        left, right = st.columns([1.6, 1])
+        with left:
+            st.subheader("Question type pattern")
+            kinds = questions["Question Type"].value_counts()
+            show_figure(horizontal_figure(kinds.index, kinds.values, CHART_THEME["teal"]), "question_types")
+        with right:
+            st.subheader("Estimated difficulty")
+            difficulty = questions["Difficulty (estimated)"].value_counts().reindex(["Easy", "Medium", "Hard"], fill_value=0)
+            show_figure(donut_figure(difficulty.index, difficulty.values, len(questions), "questions",
+                        [CHART_THEME["teal"], CHART_THEME["amber"], CHART_THEME["purple"]]), "difficulty")
 
         st.subheader("Question Mapping")
 
@@ -1218,7 +1360,15 @@ elif active_dashboard == "Exam Intelligence":
                 ["Year", "Matched Topic"]
             ).size().unstack(fill_value=0)
 
-            st.line_chart(trend)
+            fig = go.Figure()
+            for topic in trend.columns:
+                fig.add_scatter(x=trend.index.tolist(), y=trend[topic].tolist(),
+                                mode="lines+markers", name=topic,
+                                hovertemplate="%{x}: %{y} questions<extra>%{fullData.name}</extra>")
+            style_figure(fig, 340)
+            fig.update_xaxes(title="Paper year", dtick=1, tickformat="d")
+            fig.update_yaxes(title="Questions", dtick=1, rangemode="tozero")
+            show_figure(fig, "year_trends")
         else:
             st.info(
                 "Include a year in each filename, e.g. Maths_2024.pdf, "
@@ -1277,9 +1427,8 @@ elif active_dashboard == "Study Planner":
             b.metric("Completed tasks", done)
             c.metric("Overall progress", f"{progress}%")
 
-            st.progress(progress / 100)
-
             st.metric("Days to nearest exam", days_left)
+            render_plan_charts(timetable)
 
             st.subheader("Your Daily Checklist")
 
@@ -1317,7 +1466,9 @@ elif active_dashboard == "Study Planner":
                             value=(
                                 task_id in st.session_state.completed_tasks
                             ),
-                            key=f"task_{task_id}"
+                            key=f"task_{task_id}",
+                            on_change=sync_task_completion,
+                            args=(task_id,)
                         )
 
                         if checked:
