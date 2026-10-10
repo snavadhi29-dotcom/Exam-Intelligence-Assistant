@@ -1305,50 +1305,7 @@ elif active_dashboard == "Exam Intelligence":
             show_figure(donut_figure(difficulty.index, difficulty.values, len(questions), "questions",
                         [CHART_THEME["teal"], CHART_THEME["amber"], CHART_THEME["purple"]]), "difficulty")
 
-        st.subheader("Question Mapping")
-
-        status_filter = st.selectbox(
-            "Filter mapping results",
-            [
-                "All questions",
-                "Strong match",
-                "Review suggested",
-                "Low confidence — verify"
-            ]
-        )
-
-        shown = questions.copy()
-
-        if status_filter != "All questions":
-            shown = shown[
-                shown["Match Status"] == status_filter
-            ]
-
-        st.dataframe(
-            shown[
-                [
-                    "Paper", "Year", "Question No.", "Question",
-                    "Matched Topic", "Confidence %", "Match Status",
-                    "Score Gap %", "Question Type",
-                    "Difficulty (estimated)", "Marks (if detected)"
-                ]
-            ],
-            use_container_width=True,
-            hide_index=True
-        )
-
-        st.download_button(
-            "Export question mapping",
-            icon=":material/download:",
-            data=questions.to_csv(index=False).encode("utf-8"),
-            file_name="question_mapping.csv",
-            mime="text/csv"
-        )
-
-        st.caption(
-            "Confidence is a similarity score, not a probability. "
-            "Review uncertain matches before relying on topic priorities."
-        )
+    
 
         st.subheader("Year-wise Trends")
         year_data = questions.dropna(subset=["Year"]).copy()
