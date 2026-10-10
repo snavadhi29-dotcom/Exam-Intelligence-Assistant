@@ -8,7 +8,12 @@ from datetime import date, timedelta
 from difflib import SequenceMatcher
 from collections import Counter
 
-from pypdf import PdfReader
+# Safe import for PdfReader
+try:
+    from pypdf import PdfReader
+except ImportError:
+    PdfReader = None
+
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
 
@@ -23,7 +28,7 @@ st.set_page_config(
     layout="wide"
 )
 
-# Enhanced Styling: Palette-driven Highlighted Heading Boxes & Subtle Rich Accents
+# Enhanced Styling: Palette-driven Highlighted Heading Boxes & Subtle Accents
 st.markdown("""
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -77,9 +82,13 @@ html, body, [class*="css"], .stApp, p, label, input, textarea, button {
 
 /* =========================================================
    HIGHLIGHTED HEADING BOXES (PALETTE-DRIVEN)
+   Automatically styles ALL Streamlit headers & subheaders
    ========================================================= */
 
 /* H1 Main Heading */
+[data-testid="stHeadingWithAction"] h1,
+[data-testid="stHeading"] h1,
+.stMarkdown h1,
 h1 {
   font-family: var(--font-heading) !important;
   font-size: 1.95rem !important;
@@ -90,38 +99,45 @@ h1 {
   margin: 0.4rem 0 0.8rem !important;
 }
 
-/* H2 Section Headings - Styled in prominent color boxes */
+/* H2 Section Headings - In prominent palette color box */
+[data-testid="stHeadingWithAction"] h2,
+[data-testid="stHeading"] h2,
+.stMarkdown h2,
 h2 {
   font-family: var(--font-heading) !important;
-  font-size: 1.45rem !important;
+  font-size: 1.35rem !important;
   font-weight: 700 !important;
-  color: var(--ink) !important;
-  background: linear-gradient(90deg, var(--primary-tint) 0%, rgba(237, 242, 255, 0.4) 100%);
-  border-left: 4px solid var(--primary);
-  border-top: 1px solid var(--primary-border);
-  border-right: 1px solid var(--primary-border);
-  border-bottom: 1px solid var(--primary-border);
+  color: #1a329c !important;
+  background: linear-gradient(90deg, #edf2ff 0%, #f4f7ff 100%) !important;
+  border: 1px solid #c7d6fc !important;
+  border-left: 5px solid #4263eb !important;
   padding: 10px 18px !important;
   border-radius: 8px !important;
-  margin: 1.8rem 0 1rem !important;
-  display: block !important;
-  box-shadow: var(--shadow-sm);
+  margin: 1.6rem 0 0.9rem !important;
+  box-shadow: 0 2px 6px rgba(66, 99, 235, 0.08) !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: space-between !important;
 }
 
-/* H3 Subsection Headings - Styled with distinct highlighted badge boxes */
+/* H3 Subsection Headings - In highlighted teal palette badge box */
+[data-testid="stHeadingWithAction"] h3,
+[data-testid="stHeading"] h3,
+.stMarkdown h3,
 h3 {
   font-family: var(--font-body) !important;
   font-size: 1.05rem !important;
   font-weight: 600 !important;
-  color: #1e293b !important;
-  background: var(--surface) !important;
-  border: 1px solid var(--line) !important;
-  border-left: 3.5px solid var(--teal) !important;
-  padding: 8px 14px !important;
+  color: #075f5c !important;
+  background: #e6f7f6 !important;
+  border: 1px solid #a4e5e2 !important;
+  border-left: 4px solid #0b8f8a !important;
+  padding: 7px 14px !important;
   border-radius: 6px !important;
-  margin: 1.4rem 0 0.8rem !important;
-  display: inline-block !important;
-  box-shadow: 0 1px 3px rgba(0,0,0,0.03);
+  margin: 1.2rem 0 0.7rem !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  box-shadow: 0 1px 3px rgba(11, 143, 138, 0.06) !important;
 }
 
 /* Custom Highlight Boxes for Key Headers */
@@ -129,66 +145,71 @@ h3 {
   display: flex;
   align-items: center;
   gap: 10px;
-  background: var(--primary-tint);
-  border: 1px solid var(--primary-border);
-  border-left: 5px solid var(--primary);
+  background: #edf2ff;
+  border: 1px solid #c7d6fc;
+  border-left: 5px solid #4263eb;
   padding: 12px 18px;
   border-radius: 8px;
-  margin: 1.5rem 0 1rem;
+  margin: 1.4rem 0 0.9rem;
+  box-shadow: 0 2px 6px rgba(66, 99, 235, 0.07);
 }
-.heading-box-primary h2 {
+.heading-box-primary h2, .heading-box-primary span {
   margin: 0 !important;
   padding: 0 !important;
   background: none !important;
   border: none !important;
   box-shadow: none !important;
   color: #1a329c !important;
-  font-size: 1.35rem !important;
+  font-size: 1.25rem !important;
+  font-weight: 700 !important;
 }
 
 .heading-box-teal {
   display: inline-flex;
   align-items: center;
   gap: 8px;
-  background: var(--teal-tint);
-  border: 1px solid var(--teal-border);
-  border-left: 4px solid var(--teal);
-  padding: 8px 14px;
+  background: #e6f7f6;
+  border: 1px solid #a4e5e2;
+  border-left: 4px solid #0b8f8a;
+  padding: 7px 14px;
   border-radius: 6px;
-  margin: 1.2rem 0 0.8rem;
-  font-size: 1rem;
+  margin: 1rem 0 0.6rem;
+  font-size: 0.98rem;
   font-weight: 600;
   color: #075f5c;
+  box-shadow: 0 1px 3px rgba(11, 143, 138, 0.06);
 }
 
 .heading-box-purple {
   display: inline-flex;
   align-items: center;
   gap: 8px;
-  background: var(--purple-tint);
-  border: 1px solid var(--purple-border);
-  border-left: 4px solid var(--purple);
-  padding: 8px 14px;
+  background: #f3eefa;
+  border: 1px solid #d7c7f5;
+  border-left: 4px solid #7957c6;
+  padding: 7px 14px;
   border-radius: 6px;
-  margin: 1.2rem 0 0.8rem;
-  font-size: 1rem;
+  margin: 1rem 0 0.6rem;
+  font-size: 0.98rem;
   font-weight: 600;
   color: #4c3285;
+  box-shadow: 0 1px 3px rgba(121, 87, 198, 0.06);
 }
 
 .heading-box-amber {
   display: inline-flex;
   align-items: center;
   gap: 8px;
-  background: var(--amber-tint);
-  border: 1px solid var(--amber-border);
-  border-left: 4px solid var(--amber);
-  padding: 8px 14px;
+  background: #fef8ed;
+  border: 1px solid #fce1b1;
+  border-left: 4px solid #e8ac45;
+  padding: 7px 14px;
   border-radius: 6px;
-  margin: 1.2rem 0 0.8rem;
-  font-size: 1rem;
+  margin: 1rem 0 0.6rem;
+  font-size: 0.98rem;
   font-weight: 600;
   color: #925f0a;
+  box-shadow: 0 1px 3px rgba(232, 172, 69, 0.06);
 }
 
 p, label, .stCaption {
@@ -226,7 +247,7 @@ section[data-testid="stSidebar"] [data-testid="stCaptionContainer"] p {
   display: flex;
   gap: 12px;
   align-items: center;
-  margin-bottom: 30px;
+  margin-bottom: 26px;
 }
 
 .brand-mark {
@@ -262,7 +283,7 @@ section[data-testid="stSidebar"] [data-testid="stCaptionContainer"] p {
   font-weight: 700;
   color: var(--sidebar-muted);
   letter-spacing: 0.08em;
-  margin: 22px 0 10px;
+  margin: 20px 0 10px;
   text-transform: uppercase;
 }
 
@@ -324,7 +345,7 @@ section[data-testid="stSidebar"] [role="radiogroup"] label:has(input:checked) {
 }
 
 .hero {
-  padding: 8px 0 20px;
+  padding: 4px 0 20px;
   margin: 0;
 }
 
@@ -372,8 +393,8 @@ section[data-testid="stSidebar"] [role="radiogroup"] label:has(input:checked) {
   gap: 18px;
   border-top: 1px solid var(--line);
   border-bottom: 1px solid var(--line);
-  padding: 18px 0;
-  margin: 6px 0 24px;
+  padding: 16px 0;
+  margin: 4px 0 24px;
 }
 
 .summary-item {
@@ -534,18 +555,77 @@ section[data-testid="stSidebar"] [role="radiogroup"] label:has(input:checked) {
 
 
 # =========================================================
-# SESSION STATE
+# SAMPLE DATA SEEDING (Ensures instant prototype display)
 # =========================================================
 
-for key, default in {
-    "subjects": [],
-    "next_id": 1,
-    "analysis": [],
-    "completed_tasks": set(),
-    "active_dashboard": "Subjects & Setup"
-}.items():
-    if key not in st.session_state:
-        st.session_state[key] = default
+SAMPLE_RAW_SUBJECTS = [
+    {
+        "id": 1,
+        "name": "Engineering Mathematics",
+        "exam_date": date.today() + timedelta(days=7),
+        "topics": """Successive differentiation and Leibnitz theorem
+Taylor and Maclaurin series expansion
+Asymptotes and curve tracing
+Curvature and radius of curvature
+Matrices and eigenvalues
+Beta and Gamma functions
+Partial differentiation and Euler theorem""",
+        "demo_papers": [
+            {
+                "name": "Mathematics_2023.pdf",
+                "year": 2023,
+                "text": """
+1. State and prove Leibnitz theorem for successive differentiation of the product of two functions. [7 marks]
+2. Find the nth derivative of y = (x^2 + 1) * sin(2x) using Leibnitz rule. [7 marks]
+3. Expand f(x) = log(1 + x) up to fourth degree terms using Maclaurin series. [6 marks]
+4. Obtain the Taylor series expansion of f(x, y) = e^x * cos(y) in powers of (x - 1) and (y - pi/2). [8 marks]
+5. Find all the asymptotes of the algebraic curve x^3 + 2x^2y - xy^2 - 2y^3 + 4x^2 - y^2 + 1 = 0. [8 marks]
+6. Find the radius of curvature for the cycloid x = a(theta - sin(theta)), y = a(1 - cos(theta)) at theta = pi. [6 marks]
+7. Determine the eigenvalues and corresponding eigenvectors for the matrix A = [[2, 1, 1], [1, 2, 1], [0, 0, 1]]. [10 marks]
+8. Evaluate the definite integral using Beta and Gamma functions: integral from 0 to pi/2 of sin^5(x) * cos^4(x) dx. [6 marks]
+"""
+            },
+            {
+                "name": "Mathematics_2024.pdf",
+                "year": 2024,
+                "text": """
+1. If y = (sin^-1 x)^2, prove that (1 - x^2) y_(n+2) - (2n + 1)x y_(n+1) - n^2 y_n = 0 using Leibnitz theorem. [10 marks]
+2. Using Taylor's theorem, calculate the approximate value of sqrt(26) correct to four decimal places. [5 marks]
+3. Trace the cartesian curve y^2(a - x) = x^3 (Cissoid) showing all asymptotes and symmetry. [8 marks]
+4. Show that the radius of curvature of the catenary y = c*cosh(x/c) is y^2/c. [7 marks]
+5. Find the characteristic equation and verify Cayley-Hamilton theorem for matrix M = [[1, 2], [3, 4]]. Hence find M^-1. [8 marks]
+6. Prove the relationship between Beta and Gamma functions: B(m, n) = (Gamma(m) * Gamma(n)) / Gamma(m + n). [8 marks]
+7. Verify Euler's theorem for homogeneous function u = x^2 * y / (x + y). [6 marks]
+"""
+            }
+        ]
+    },
+    {
+        "id": 2,
+        "name": "Basic Electrical Engineering",
+        "exam_date": date.today() + timedelta(days=12),
+        "topics": """DC Circuits and Kirchhoff laws
+Thevenin and Norton theorems
+Single phase AC series RLC resonance
+Three phase balanced star delta connections
+Single phase transformer equivalent circuit
+DC Motor working principle and back EMF""",
+        "demo_papers": [
+            {
+                "name": "Electrical_2024.pdf",
+                "year": 2024,
+                "text": """
+1. State Kirchhoff's Current Law (KCL) and Kirchhoff's Voltage Law (KVL) with suitable circuit diagrams. [5 marks]
+2. Calculate the load current passing through 10 ohm resistor using Thevenin theorem for the given bridge circuit. [8 marks]
+3. Derive the expression for resonant frequency and quality factor Q for a series RLC AC circuit. [8 marks]
+4. Explain the relationship between line and phase voltages and currents in a balanced star connected 3-phase load. [7 marks]
+5. Draw and explain the approximate equivalent circuit of a single phase transformer referred to primary side. [8 marks]
+6. Explain the working principle of a DC motor and derive the back EMF equation. What is its role? [8 marks]
+"""
+            }
+        ]
+    }
+]
 
 
 # =========================================================
@@ -627,10 +707,12 @@ def stable_id(*parts):
 
 
 # =========================================================
-# PDF TEXT EXTRACTION
+# PDF & TEXT EXTRACTION
 # =========================================================
 
 def extract_pdf(pdf_bytes):
+    if PdfReader is None:
+        return "", "pypdf not installed"
     pieces = []
     try:
         reader = PdfReader(BytesIO(pdf_bytes))
@@ -644,16 +726,6 @@ def extract_pdf(pdf_bytes):
     text = "\n".join(pieces)
     if len(text.strip()) >= 40:
         return text, "Selectable text"
-
-    try:
-        from pdf2image import convert_from_bytes
-        import pytesseract
-        pages = convert_from_bytes(pdf_bytes, dpi=200)
-        ocr_text = "\n".join(pytesseract.image_to_string(page) for page in pages)
-        if ocr_text.strip():
-            return ocr_text, "OCR"
-    except Exception:
-        pass
 
     return text, "OCR unavailable or no readable text"
 
@@ -862,12 +934,13 @@ def extract_year(filename):
 # ANALYSIS
 # =========================================================
 
-def analyze_subject(subject, files):
+def analyze_subject(subject, files, demo_papers=None):
     topics = [x.strip() for x in subject["topics"].splitlines() if x.strip()]
     all_rows = []
     notices = []
 
-    for pdf in files:
+    # Process uploaded files
+    for pdf in (files or []):
         text, method = extract_pdf(pdf.getvalue())
         if not text.strip():
             notices.append(f"{pdf.name}: no readable text was extracted.")
@@ -883,6 +956,16 @@ def analyze_subject(subject, files):
             row["Year"] = year
             all_rows.append(row)
         notices.append(f"{pdf.name}: {len(rows)} questions detected ({method}).")
+
+    # Process embedded demo papers
+    for paper in (demo_papers or []):
+        questions = extract_questions(paper["text"])
+        rows = match_topics(questions, topics)
+        for row in rows:
+            row["Paper"] = paper["name"]
+            row["Year"] = paper.get("year")
+            all_rows.append(row)
+        notices.append(f"{paper['name']}: {len(rows)} questions extracted.")
 
     result = pd.DataFrame(all_rows)
     if result.empty:
@@ -924,9 +1007,9 @@ def analyze_subject(subject, files):
     def priority(row):
         if row["Questions"] == 0:
             return "No mapped questions"
-        if row["Priority Score"] >= 40:
+        if row["Priority Score"] >= 35:
             return "High"
-        if row["Priority Score"] >= 20:
+        if row["Priority Score"] >= 18:
             return "Medium"
         return "Low"
 
@@ -1030,6 +1113,40 @@ def build_timetable(analysis, daily_hours):
         axis=1
     )
     return df.sort_values(["Date", "Exam Date", "Kind", "Subject"]).reset_index(drop=True)
+
+
+# =========================================================
+# SEED INITIAL DATA (Auto-populates so it matches the preview!)
+# =========================================================
+
+if "initialized" not in st.session_state:
+    st.session_state.subjects = [
+        {
+            "id": s["id"],
+            "name": s["name"],
+            "exam_date": s["exam_date"],
+            "topics": s["topics"],
+            "demo_papers": s["demo_papers"]
+        }
+        for s in SAMPLE_RAW_SUBJECTS
+    ]
+    st.session_state.next_id = 3
+    st.session_state.completed_tasks = set()
+    st.session_state.active_dashboard = "Subjects & Setup"
+
+    # Pre-run analysis so Exam Intelligence and Study Planner work immediately
+    initial_analysis = []
+    for s in st.session_state.subjects:
+        q_df, t_df, _ = analyze_subject(s, files=[], demo_papers=s["demo_papers"])
+        initial_analysis.append({
+            "id": s["id"],
+            "name": s["name"],
+            "exam_date": s["exam_date"],
+            "questions": q_df,
+            "topics": t_df
+        })
+    st.session_state.analysis = initial_analysis
+    st.session_state.initialized = True
 
 
 # =========================================================
@@ -1184,6 +1301,41 @@ with st.sidebar:
     daily_hours = st.slider("Available study hours per day", 1, 12, 4)
     st.caption(f"{daily_hours} hours available each day")
     st.divider()
+
+    c_rst1, c_rst2 = st.columns(2)
+    with c_rst1:
+        if st.button("Reload Demo", use_container_width=True):
+            st.session_state.subjects = [
+                {
+                    "id": s["id"],
+                    "name": s["name"],
+                    "exam_date": s["exam_date"],
+                    "topics": s["topics"],
+                    "demo_papers": s["demo_papers"]
+                }
+                for s in SAMPLE_RAW_SUBJECTS
+            ]
+            initial_analysis = []
+            for s in st.session_state.subjects:
+                q_df, t_df, _ = analyze_subject(s, files=[], demo_papers=s["demo_papers"])
+                initial_analysis.append({
+                    "id": s["id"],
+                    "name": s["name"],
+                    "exam_date": s["exam_date"],
+                    "questions": q_df,
+                    "topics": t_df
+                })
+            st.session_state.analysis = initial_analysis
+            st.session_state.completed_tasks = set()
+            st.rerun()
+
+    with c_rst2:
+        if st.button("Clear All", use_container_width=True):
+            st.session_state.subjects = []
+            st.session_state.analysis = []
+            st.session_state.completed_tasks = set()
+            st.rerun()
+
     st.caption("Local text analysis · No AI API required")
     st.caption("Your workspace lasts for this browser session.")
 
@@ -1198,8 +1350,12 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 subject_count = len(st.session_state.subjects)
-paper_count = sum(len(st.session_state.get(f"files_{s['id']}", []) or []) for s in st.session_state.subjects)
+paper_count = sum(
+    len(st.session_state.get(f"files_{s['id']}", []) or []) + len(s.get("demo_papers", []))
+    for s in st.session_state.subjects
+)
 question_count = sum(len(s["questions"]) for s in st.session_state.analysis)
+
 st.markdown(f"""
 <div class="summary-strip">
 <div class="summary-item"><span>Subjects in workspace</span><strong>{subject_count:02d}</strong></div>
@@ -1228,7 +1384,8 @@ if active_dashboard == "Subjects & Setup":
             "id": sid,
             "name": "",
             "exam_date": date.today() + timedelta(days=7),
-            "topics": ""
+            "topics": "",
+            "demo_papers": []
         })
         st.rerun()
 
@@ -1282,10 +1439,13 @@ if active_dashboard == "Subjects & Setup":
                 key=f"files_{sid}"
             )
 
-            if files:
+            # Show either newly uploaded files or existing demo papers
+            total_papers = list(files or []) + subject.get("demo_papers", [])
+            if total_papers:
                 st.caption("Selected papers:")
-                for file in files:
-                    st.write(f"📄 {file.name}")
+                for p in total_papers:
+                    p_name = p.name if hasattr(p, "name") else p.get("name", "Paper")
+                    st.write(f"📄 {p_name}")
 
             c3, c4 = st.columns(2)
             with c3:
@@ -1309,8 +1469,7 @@ if active_dashboard == "Subjects & Setup":
             with c4:
                 if st.button("Remove subject", key=f"remove_{sid}", icon=":material/delete:"):
                     st.session_state.subjects = [s for s in st.session_state.subjects if s["id"] != sid]
-                    st.session_state.analysis = []
-                    st.session_state.completed_tasks = set()
+                    st.session_state.analysis = [a for a in st.session_state.analysis if a["id"] != sid]
                     st.rerun()
 
     st.divider()
@@ -1330,8 +1489,9 @@ if active_dashboard == "Subjects & Setup":
             exam_date = st.session_state.get(f"date_{sid}", subject["exam_date"])
             topics = st.session_state.get(f"topics_{sid}", subject["topics"])
             files = st.session_state.get(f"files_{sid}", [])
+            demo_papers = subject.get("demo_papers", [])
 
-            if not name or not topics.strip() or not files:
+            if not name or not topics.strip() or (not files and not demo_papers):
                 errors.append(f"{name or 'Subject ' + str(sid)}: missing name, topics, or PDF.")
                 continue
 
@@ -1340,7 +1500,7 @@ if active_dashboard == "Subjects & Setup":
             subject["topics"] = topics
 
             with st.spinner(f"Analyzing {name}..."):
-                question_df, topic_df, notices = analyze_subject(subject, files)
+                question_df, topic_df, notices = analyze_subject(subject, files, demo_papers)
 
             for notice in notices:
                 st.write(notice)
