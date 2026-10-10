@@ -107,6 +107,37 @@ hr {border-color:var(--line)!important;margin:24px 0}
 @media(max-width:900px) {.block-container{padding:1.8rem 1.3rem}h1{font-size:1.6rem!important}.summary-strip{gap:12px}.summary-item{padding-left:10px}.workspace-status{display:none}}
 @media(max-width:500px) {.summary-strip{grid-template-columns:1fr;gap:16px}.footer-note{flex-direction:column}.workspace-top{font-size:11px}}
 @media(prefers-reduced-motion:reduce) {*{transition:none!important;animation:none!important}}
+/* Heading accents only — existing layout, palette and workflow are unchanged. */
+:root {
+ --heading-blue-tint:color-mix(in srgb,var(--primary) 8%,var(--surface));
+ --heading-teal-tint:color-mix(in srgb,var(--teal) 8%,var(--surface));
+ --heading-purple-tint:color-mix(in srgb,var(--purple) 7%,var(--surface));
+}
+.hero h1 {
+ display:table;
+ max-width:100%;
+ box-sizing:border-box;
+ padding:10px 16px;
+ background:var(--heading-blue-tint);
+ border-left:4px solid var(--primary);
+ border-radius:0 6px 6px 0;
+ overflow-wrap:break-word;
+}
+section[data-testid="stMain"] [data-testid="stHeading"] h2 {
+ padding:10px 14px!important;
+ background:var(--heading-teal-tint);
+ border-left:4px solid var(--teal);
+ border-radius:0 6px 6px 0;
+ overflow-wrap:break-word;
+}
+section[data-testid="stMain"] [data-testid="stHeading"] h3,
+section[data-testid="stMain"] [data-testid="stMarkdownContainer"]>h3 {
+ padding:8px 12px!important;
+ background:var(--heading-purple-tint);
+ border-left:3px solid var(--purple);
+ border-radius:0 6px 6px 0;
+ overflow-wrap:break-word;
+}
 </style>
 """, unsafe_allow_html=True)
 
